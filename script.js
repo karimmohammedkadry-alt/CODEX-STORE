@@ -1,50 +1,156 @@
-```javascript
 import { createClient } from '@supabase/supabase-js';
 
 /* =========================================================
-   SUPABASE CONFIG
-========================================================= */
+   CODEX STORE - MAIN SCRIPT
+   ========================================================= */
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-/*
-  نستخدم قيمًا احتياطية حتى لا ينهار الموقع بالكامل إذا كانت
-  Environment Variables غير موجودة أثناء تشغيل Vite.
-*/
+if (!SUPABASE_URL || !SUPABASE_KEY) {
+  console.error('Missing Supabase environment variables.');
+}
+
 export const supabase = createClient(
-  SUPABASE_URL || 'https://placeholder.supabase.co',
-  SUPABASE_KEY || 'placeholder-publishable-key'
+  SUPABASE_URL || '',
+  SUPABASE_KEY || ''
 );
+
+/* =========================================================
+   GLOBAL STATE
+   ========================================================= */
+
+let currentUser = null;
+let currentProfile = null;
+let currentApp = null;
+let editingAppId = null;
 
 const ADMIN_EMAIL = 'karimmohammedkadry@gmail.com';
 
-const categories = {
-  business: 'الأعمال',
-  education: 'التعليم',
-  health: 'الصحة',
-  productivity: 'الإنتاجية',
-  games: 'الألعاب',
-  tools: 'الأدوات'
+const CATEGORY_MAP = {
+  business: 'Business',
+  education: 'Education',
+  health: 'Health',
+  productivity: 'Productivity',
+  games: 'Games',
+  tools: 'Tools'
 };
 
-let apps = [];
-let currentUser = null;
-let currentProfile = null;
+const CATEGORY_AR = {
+  business: 'أعمال',
+  education: 'تعليم',
+  health: 'صحة',
+  productivity: 'إنتاجية',
+  games: 'ألعاب',
+  tools: 'أدوات'
+};
 
 /* =========================================================
    HELPERS
-========================================================= */
+   ========================================================= */
 
-function escapeHTML(value = '') {
-  return String(value).replace(/[&<>'"]/g, char => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    "'": '&#39;',
-    '"': '&quot;'
-  }[char]));
+function $(id) {
+  return document.getElementById(id);
 }
+
+function escapeHtml(value) {
+  if (value === null || value === undefined) return '';
+
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+function formatBytes(bytes) {
+  const size = Number(bytes || 0);
+
+  if (!size) return '0 B';
+
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const index = Math.min(
+    Math.floor(Math.log(size) / Math.log(1024)),
+    units.length - 1
+  );
+
+  return `${(size / Math.pow(1024, index)).toFixed(index === 0 ? 0 : 2)} ${units[index]}`;
+}
+
+function formatDate(value) {
+  if (!value) return '—';
+
+  try {
+    return new Intl.DateTimeFormat('en-GB', {
+      year: 'numeric',
+      month: 'short',
+      day: '2-digit'
+    }).format(new Date(value));
+  } catch {
+    return value;
+  }
+}
+
+function getCategoryName(category) {
+  if (!category) return 'Other';
+
+  return (
+    CATEGORY_MAP[category] ||
+    CATEGORY_AR[category] ||
+    category
+  );
+}
+
+function normalizeCategory(app) {
+  return (
+    app?.category ||
+    app?.category_name ||
+    app?.categories?.slug ||
+    app?.categories?.name ||
+    ''
+  );
+}
+
+function getAppIcon(app) {
+  if (app?.icon_url) {
+    return `
+      <img
+        src="${escapeHtml(app.icon_url)}"
+        alt="${escapeHtml(app.name || 'App')}"
+        class="app-icon-image"
+        loading="lazy"
+      >
+    `;
+  }
+
+  const text =
+    app?.icon_text ||
+    (app?.name || 'C').trim().charAt(0).toUpperCase() ||
+    'C';
+
+  return `
+    <div class="app-icon-placeholder">
+      ${escapeHtml(text)}
+    </div>
+  `;
+}
+
+function showElement(element) {
+  if (!element) return;
+  element.hidden = false;
+  element.style.display = '';
+}
+
+function hideElement(element) {
+  if (!element) return;
+  element.hidden = true;
+  element.style.display = 'none';
+}
+
+/* =========================================================
+   TOAST
+   ========================================================= */
 
 function toast(message, type = 'success') {
   let box = document.getElementById('codexToast');
@@ -66,210 +172,45 @@ function toast(message, type = 'success') {
   }, 2800);
 }
 
-function formatFileSize(bytes) {
-  const n = Number(bytes) || 0;
-
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 ** 2) return `${(n / 1024).toFixed(1)} KB`;
-  if (n < 1024 ** 3) return `${(n / 1024 ** 2).toFixed(1)} MB`;
-
-  return `${(n / 1024 ** 3).toFixed(2)} GB`;
-}
-
-function setText(id, value) {
-  const element = document.getElementById(id);
-
-  if (element) {
-    element.textContent = value ?? '';
-  }
-}
-
-function getProfileName(profile = currentProfile) {
-  if (!profile) {
-    return currentUser?.user_metadata?.name ||
-      currentUser?.user_metadata?.full_name ||
-      currentUser?.email?.split('@')[0] ||
-      '';
-  }
-
-  return (
-    profile.name ||
-    profile.full_name ||
-    currentUser?.user_metadata?.name ||
-    currentUser?.user_metadata?.full_name ||
-    currentUser?.email?.split('@')[0] ||
-    ''
-  );
-}
-
-function getProfileEmail(profile = currentProfile) {
-  return (
-    profile?.email ||
-    currentUser?.email ||
-    ''
-  );
-}
-
-function getProfileRole(profile = currentProfile) {
-  return profile?.role === 'admin' ? 'admin' : 'user';
-}
-
-function appIconMarkup(app, cls = 'app-icon') {
-  if (app.icon_url) {
-    return `
-      <div class="${cls} has-image">
-        <img
-          src="${escapeHTML(app.icon_url)}"
-          alt="${escapeHTML(app.name || 'App')}"
-          loading="lazy"
-        >
-      </div>
-    `;
-  }
-
-  return `
-    <div class="${cls} ${escapeHTML(app.color || 'blue')}">
-      ${escapeHTML(app.icon_text || 'C')}
-    </div>
-  `;
-}
-
-function fileBadgeMarkup(app) {
-  const files = app.app_files || [];
-
-  return `
-    <div class="file-badges">
-      ${files.map(file => `
-        <span>
-          ${file.platform === 'windows' ? 'EXE' : 'APK'}
-          ·
-          ${escapeHTML(formatFileSize(file.size_bytes))}
-        </span>
-      `).join('')}
-    </div>
-  `;
-}
-
-function getFile(app, platform) {
-  return (app.app_files || []).find(file => file.platform === platform);
-}
-
-function appSize(app) {
-  return formatFileSize(
-    (app.app_files || []).reduce(
-      (total, file) => total + Number(file.size_bytes || 0),
-      0
-    )
-  );
-}
-
-function platformName(app) {
-  const platforms = (app.app_files || []).map(file => file.platform);
-
-  if (
-    platforms.includes('windows') &&
-    platforms.includes('android')
-  ) {
-    return 'Windows + Android';
-  }
-
-  if (platforms.includes('android')) {
-    return 'Android';
-  }
-
-  if (platforms.includes('windows')) {
-    return 'Windows';
-  }
-
-  return '—';
-}
-
-function publicUrl(path) {
-  if (!path) return '';
-
-  return supabase.storage
-    .from('app-files')
-    .getPublicUrl(path)
-    .data
-    .publicUrl;
-}
+window.toast = toast;
 
 /* =========================================================
-   CONFIG
-========================================================= */
+   AUTH ERROR TRANSLATION
+   ========================================================= */
 
-async function requireConfig() {
-  if (!SUPABASE_URL || !SUPABASE_KEY) {
-    console.error(
-      'Supabase configuration is missing.',
-      {
-        VITE_SUPABASE_URL: Boolean(SUPABASE_URL),
-        VITE_SUPABASE_PUBLISHABLE_KEY: Boolean(SUPABASE_KEY)
-      }
-    );
+function translateAuthError(message) {
+  const text = String(message || '').toLowerCase();
 
-    toast(
-      'بيانات Supabase غير موجودة. تأكد من VITE_SUPABASE_URL و VITE_SUPABASE_PUBLISHABLE_KEY.',
-      'error'
-    );
-
-    return false;
+  if (text.includes('invalid login credentials')) {
+    return 'البريد الإلكتروني أو كلمة المرور غير صحيحة.';
   }
 
-  return true;
-}
-
-/* =========================================================
-   SESSION
-========================================================= */
-
-async function loadSession() {
-  try {
-    const {
-      data,
-      error
-    } = await supabase.auth.getSession();
-
-    if (error) {
-      console.error('SESSION ERROR:', error);
-      currentUser = null;
-      currentProfile = null;
-      return null;
-    }
-
-    currentUser = data?.session?.user || null;
-
-    if (currentUser) {
-      await loadProfile();
-    }
-
-    return currentUser;
-
-  } catch (error) {
-    console.error('SESSION EXCEPTION:', error);
-    currentUser = null;
-    currentProfile = null;
-    return null;
+  if (text.includes('email not confirmed')) {
+    return 'يجب تأكيد البريد الإلكتروني أولاً.';
   }
-}
 
-function setupAuthStateListener() {
-  supabase.auth.onAuthStateChange(async (event, session) => {
-    currentUser = session?.user || null;
+  if (text.includes('user already registered')) {
+    return 'هذا البريد الإلكتروني مسجل بالفعل.';
+  }
 
-    if (currentUser) {
-      await loadProfile();
-    } else {
-      currentProfile = null;
-    }
+  if (text.includes('password should be at least')) {
+    return 'كلمة المرور قصيرة جداً.';
+  }
 
-    setupNavbar();
-  });
+  if (text.includes('unable to validate email')) {
+    return 'البريد الإلكتروني غير صحيح.';
+  }
+
+  if (text.includes('rate limit')) {
+    return 'تم تجاوز عدد المحاولات. حاول مرة أخرى لاحقاً.';
+  }
+
+  return message || 'حدث خطأ غير متوقع.';
 }
 
 /* =========================================================
    PROFILE
-========================================================= */
+   ========================================================= */
 
 async function loadProfile() {
   if (!currentUser) {
@@ -277,461 +218,559 @@ async function loadProfile() {
     return null;
   }
 
-  try {
-    const {
-      data,
-      error
-    } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', currentUser.id)
-      .maybeSingle();
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', currentUser.id)
+    .maybeSingle();
 
-    if (error) {
-      console.error('PROFILE ERROR:', error);
-
-      /*
-        حتى لو الـprofile غير موجود، لا نمنع المستخدم
-        من الدخول إلى الحساب.
-      */
-      currentProfile = {
-        id: currentUser.id,
-        name:
-          currentUser.user_metadata?.name ||
-          currentUser.user_metadata?.full_name ||
-          '',
-        full_name:
-          currentUser.user_metadata?.name ||
-          currentUser.user_metadata?.full_name ||
-          '',
-        email: currentUser.email || '',
-        role: 'user'
-      };
-
-      return currentProfile;
-    }
-
-    if (!data) {
-      currentProfile = {
-        id: currentUser.id,
-        name:
-          currentUser.user_metadata?.name ||
-          currentUser.user_metadata?.full_name ||
-          '',
-        full_name:
-          currentUser.user_metadata?.name ||
-          currentUser.user_metadata?.full_name ||
-          '',
-        email: currentUser.email || '',
-        role: 'user'
-      };
-
-      return currentProfile;
-    }
-
-    /*
-      نوحد التعامل مع name و full_name داخل التطبيق
-      بدون الاعتماد على عمود واحد فقط.
-    */
-    currentProfile = {
-      ...data,
-      name: data.name || data.full_name || '',
-      full_name: data.full_name || data.name || '',
-      email: data.email || currentUser.email || '',
-      role: data.role || 'user'
-    };
-
-    return currentProfile;
-
-  } catch (error) {
-    console.error('PROFILE EXCEPTION:', error);
-
-    currentProfile = {
-      id: currentUser.id,
-      name: currentUser.user_metadata?.name || '',
-      full_name: currentUser.user_metadata?.name || '',
-      email: currentUser.email || '',
-      role: 'user'
-    };
-
-    return currentProfile;
+  if (error) {
+    console.error('Profile load error:', error);
+    currentProfile = null;
+    return null;
   }
+
+  currentProfile = data || null;
+
+  return currentProfile;
 }
 
-async function isAdmin() {
-  if (!currentUser) return false;
+async function ensureProfile() {
+  if (!currentUser) return null;
 
-  /*
-    نعتمد على role من profiles.
-    ونستخدم البريد فقط كـ fallback للحساب الرئيسي.
-  */
-  if (currentProfile?.role === 'admin') {
-    return true;
+  const existing = await loadProfile();
+
+  if (existing) return existing;
+
+  const metadata = currentUser.user_metadata || {};
+
+  const payload = {
+    id: currentUser.id,
+    full_name: metadata.name || metadata.full_name || '',
+    name: metadata.name || metadata.full_name || '',
+    email: currentUser.email || '',
+    role: 'user'
+  };
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .upsert(payload, {
+      onConflict: 'id'
+    })
+    .select('*')
+    .single();
+
+  if (error) {
+    console.error('Profile creation error:', error);
+    return null;
   }
 
+  currentProfile = data;
+
+  return data;
+}
+
+function isAdmin() {
+  if (!currentUser) return false;
+
   if (
-    currentUser.email &&
-    currentUser.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()
+    String(currentUser.email || '').toLowerCase() ===
+    ADMIN_EMAIL.toLowerCase()
   ) {
     return true;
   }
 
-  return false;
+  return currentProfile?.role === 'admin';
 }
 
 /* =========================================================
-   NAVBAR
-========================================================= */
+   NAVIGATION
+   ========================================================= */
 
-function setupNavbar() {
-  const loginBtn = document.getElementById('loginBtn');
+function setupNavigation() {
+  const currentPage =
+    location.pathname.split('/').pop() || 'index.html';
 
-  if (loginBtn) {
-    loginBtn.textContent = currentUser
-      ? (getProfileName() || 'حسابي')
-      : 'تسجيل الدخول';
+  document.querySelectorAll('[data-page]').forEach((link) => {
+    const page = link.getAttribute('data-page');
 
-    loginBtn.onclick = () => {
-      location.href = currentUser
-        ? 'account.html'
-        : 'login.html';
-    };
-  }
-
-  document.querySelectorAll('[data-logout]').forEach(button => {
-    button.onclick = logout;
+    if (
+      page === currentPage ||
+      (currentPage === '' && page === 'index.html')
+    ) {
+      link.classList.add('active');
+    }
   });
 
-  const admin =
-    currentUser &&
-    (
-      currentProfile?.role === 'admin' ||
-      currentUser.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()
-    );
+  document.querySelectorAll('[data-logout]').forEach((button) => {
+    button.addEventListener('click', async (event) => {
+      event.preventDefault();
 
-  if (admin) {
-    document.querySelectorAll('.nav-actions').forEach(nav => {
-      if (!nav.querySelector('[data-dashboard-link]')) {
-        nav.insertAdjacentHTML(
-          'afterbegin',
-          `
-            <a
-              class="secondary-btn"
-              data-dashboard-link
-              href="dashboard.html"
-            >
-              لوحة التحكم
-            </a>
-          `
-        );
+      await supabase.auth.signOut();
+
+      location.href = 'index.html';
+    });
+  });
+}
+
+/* =========================================================
+   NAVBAR USER
+   ========================================================= */
+
+function renderUserUI() {
+  const loginLinks = document.querySelectorAll(
+    '[data-auth="login"], .login-link'
+  );
+
+  const accountLinks = document.querySelectorAll(
+    '[data-auth="account"], .account-link'
+  );
+
+  const adminLinks = document.querySelectorAll(
+    '[data-auth="admin"], .admin-link'
+  );
+
+  const logoutLinks = document.querySelectorAll(
+    '[data-auth="logout"], .logout-link'
+  );
+
+  if (currentUser) {
+    loginLinks.forEach((el) => hideElement(el));
+    accountLinks.forEach((el) => showElement(el));
+    logoutLinks.forEach((el) => showElement(el));
+
+    adminLinks.forEach((el) => {
+      if (isAdmin()) {
+        showElement(el);
+      } else {
+        hideElement(el);
       }
     });
-  }
-}
-
-async function logout() {
-  try {
-    await supabase.auth.signOut();
-  } catch (error) {
-    console.error('LOGOUT ERROR:', error);
+  } else {
+    loginLinks.forEach((el) => showElement(el));
+    accountLinks.forEach((el) => hideElement(el));
+    adminLinks.forEach((el) => hideElement(el));
+    logoutLinks.forEach((el) => hideElement(el));
   }
 
-  currentUser = null;
-  currentProfile = null;
+  const userName =
+    currentProfile?.name ||
+    currentProfile?.full_name ||
+    currentUser?.user_metadata?.name ||
+    currentUser?.email ||
+    '';
 
-  location.href = 'index.html';
-}
+  document.querySelectorAll('[data-user-name]').forEach((el) => {
+    el.textContent = userName;
+  });
 
-function showLoading() {
-  const element = document.querySelector('.loading-screen');
-
-  if (!element) return;
-
-  setTimeout(() => {
-    element.classList.add('hide');
-  }, 650);
+  document.querySelectorAll('[data-user-email]').forEach((el) => {
+    el.textContent = currentUser?.email || '';
+  });
 }
 
 /* =========================================================
    APPS
-========================================================= */
+   ========================================================= */
 
-async function loadApps() {
-  try {
-    const {
-      data,
-      error
-    } = await supabase
-      .from('apps')
-      .select('*, app_files(*)')
-      .order('created_at', { ascending: false });
+async function loadApps(options = {}) {
+  const {
+    search = '',
+    category = '',
+    publishedOnly = true
+  } = options;
 
-    if (error) {
-      console.error('APPS ERROR:', error);
-      toast('تعذر تحميل التطبيقات من Supabase.', 'error');
-      apps = [];
-      return [];
-    }
+  let query = supabase
+    .from('apps')
+    .select(`
+      *,
+      categories (
+        id,
+        name,
+        slug
+      )
+    `)
+    .order('created_at', {
+      ascending: false
+    });
 
-    apps = data || [];
+  if (publishedOnly && !isAdmin()) {
+    query = query.eq('is_published', true);
+  }
 
-    return apps;
+  const { data, error } = await query;
 
-  } catch (error) {
-    console.error('APPS EXCEPTION:', error);
-    apps = [];
+  if (error) {
+    console.error('Apps load error:', error);
+    toast('تعذر تحميل التطبيقات.', 'error');
     return [];
   }
+
+  let apps = data || [];
+
+  const normalizedSearch = String(search || '')
+    .trim()
+    .toLowerCase();
+
+  if (normalizedSearch) {
+    apps = apps.filter((app) => {
+      const values = [
+        app.name,
+        app.slug,
+        app.description,
+        app.developer_name,
+        app.category,
+        app.category_name,
+        app.categories?.name,
+        app.categories?.slug
+      ];
+
+      return values.some((value) =>
+        String(value || '')
+          .toLowerCase()
+          .includes(normalizedSearch)
+      );
+    });
+  }
+
+  if (category) {
+    apps = apps.filter((app) => {
+      return normalizeCategory(app) === category;
+    });
+  }
+
+  return apps;
 }
 
-function displayApps(list) {
-  const grid = document.getElementById('appsGrid');
+function renderApps(apps, container) {
+  if (!container) return;
 
-  if (!grid) return;
+  if (!apps.length) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <h3>No apps found</h3>
+        <p>There are no applications matching your search.</p>
+      </div>
+    `;
+    return;
+  }
 
-  grid.innerHTML = list.length
-    ? list.map(app => `
-        <article class="app-card">
+  container.innerHTML = apps
+    .map((app) => {
+      const category = normalizeCategory(app);
+
+      return `
+        <article
+          class="app-card"
+          data-app-id="${escapeHtml(app.id)}"
+        >
           <a
             class="app-card-link"
             href="app.html?id=${encodeURIComponent(app.id)}"
           >
-            ${appIconMarkup(app)}
+            <div class="app-card-icon">
+              ${getAppIcon(app)}
+            </div>
 
             <div class="app-card-content">
-              <span>
-                ${escapeHTML(app.category_name || categories[app.category] || '')}
-              </span>
+              <h3>${escapeHtml(app.name || 'Unnamed App')}</h3>
 
-              <h3>
-                ${escapeHTML(app.name)}
-              </h3>
-
-              <p>
-                ${escapeHTML(app.description)}
-              </p>
-
-              <div class="app-meta">
-                <span>
-                  v${escapeHTML(app.version || '1.0.0')}
-                </span>
-
-                <span>
-                  ${escapeHTML(appSize(app))}
-                </span>
+              <div class="app-card-category">
+                ${escapeHtml(getCategoryName(category))}
               </div>
 
-              ${fileBadgeMarkup(app)}
+              <p>
+                ${escapeHtml(
+                  app.description || 'No description available.'
+                )}
+              </p>
+
+              <div class="app-card-meta">
+                <span>
+                  ${escapeHtml(app.version || '1.0.0')}
+                </span>
+
+                <span>
+                  ${Number(app.downloads_count || 0).toLocaleString()}
+                  downloads
+                </span>
+              </div>
             </div>
           </a>
         </article>
-      `).join('')
-    : '<div class="empty-state">لا توجد تطبيقات مطابقة.</div>';
-}
-
-function displayReleases() {
-  const box = document.getElementById('releasesList');
-
-  if (!box) return;
-
-  box.innerHTML = apps
-    .slice(0, 4)
-    .map(app => `
-      <article class="release-card">
-        <a href="app.html?id=${encodeURIComponent(app.id)}">
-          ${appIconMarkup(app, 'release-icon')}
-
-          <div>
-            <span>
-              v${escapeHTML(app.version || '1.0.0')}
-            </span>
-
-            <h3>
-              ${escapeHTML(app.name)}
-            </h3>
-
-            <p>
-              ${escapeHTML(app.description)}
-            </p>
-          </div>
-        </a>
-      </article>
-    `)
+      `;
+    })
     .join('');
 }
 
-function filterHomeApps() {
-  const query = (
-    document.getElementById('searchInput')?.value || ''
-  )
-    .trim()
-    .toLowerCase();
+/* =========================================================
+   HOME / STORE
+   ========================================================= */
 
-  const active =
-    document.querySelector('.category.active')?.dataset.category ||
-    'all';
+async function setupStorePage() {
+  const container =
+    $('appsGrid') ||
+    $('appsContainer') ||
+    document.querySelector('[data-apps-grid]');
 
-  const filtered = apps.filter(app => {
-    const categoryMatch =
-      active === 'all' ||
-      app.category === active;
+  if (!container) return;
 
-    const textMatch = [
-      app.name,
-      app.description,
-      app.category_name,
-      categories[app.category]
-    ].some(value =>
-      String(value || '')
-        .toLowerCase()
-        .includes(query)
-    );
+  const searchInput =
+    $('searchInput') ||
+    $('appSearch') ||
+    document.querySelector('[data-app-search]');
 
-    return categoryMatch && textMatch;
-  });
+  const categorySelect =
+    $('categoryFilter') ||
+    $('appCategoryFilter') ||
+    document.querySelector('[data-category-filter]');
 
-  displayApps(filtered);
+  async function refresh() {
+    const apps = await loadApps({
+      search: searchInput?.value || '',
+      category: categorySelect?.value || '',
+      publishedOnly: true
+    });
+
+    renderApps(apps, container);
+  }
+
+  searchInput?.addEventListener('input', refresh);
+  categorySelect?.addEventListener('change', refresh);
+
+  await refresh();
 }
 
 /* =========================================================
    APP DETAILS
-========================================================= */
+   ========================================================= */
 
-async function loadAppDetails() {
-  const element = document.getElementById('detailsName');
+async function loadAppById(id) {
+  if (!id) return null;
 
-  if (!element) return;
+  const { data, error } = await supabase
+    .from('apps')
+    .select(`
+      *,
+      categories (
+        id,
+        name,
+        slug
+      ),
+      app_files (
+        id,
+        app_id,
+        platform,
+        file_name,
+        storage_path,
+        mime_type,
+        file_size,
+        size_bytes,
+        version,
+        is_current,
+        created_at
+      )
+    `)
+    .eq('id', id)
+    .maybeSingle();
 
-  const id = new URLSearchParams(location.search).get('id');
+  if (error) {
+    console.error('App details error:', error);
+    return null;
+  }
 
-  const app = apps.find(item => String(item.id) === String(id));
+  return data;
+}
 
-  if (!app) {
-    element.textContent = 'التطبيق غير موجود';
+function getFileSize(file) {
+  return file?.size_bytes || file?.file_size || 0;
+}
+
+function renderAppDetails(app) {
+  const title = $('appTitle');
+  const description = $('appDescription');
+  const version = $('appVersion');
+  const category = $('appCategory');
+  const developer = $('appDeveloper');
+  const downloads = $('appDownloads');
+  const icon = $('appIcon');
+  const windowsButton = $('windowsDownload');
+  const androidButton = $('androidDownload');
+
+  if (title) {
+    title.textContent = app.name || 'Unnamed App';
+  }
+
+  if (description) {
+    description.textContent =
+      app.description || 'No description available.';
+  }
+
+  if (version) {
+    version.textContent = app.version || '1.0.0';
+  }
+
+  if (category) {
+    category.textContent = getCategoryName(
+      normalizeCategory(app)
+    );
+  }
+
+  if (developer) {
+    developer.textContent =
+      app.developer_name || 'CODEX Developer';
+  }
+
+  if (downloads) {
+    downloads.textContent = Number(
+      app.downloads_count || 0
+    ).toLocaleString();
+  }
+
+  if (icon) {
+    icon.innerHTML = getAppIcon(app);
+  }
+
+  const files = Array.isArray(app.app_files)
+    ? app.app_files
+    : [];
+
+  const windowsFile =
+    files.find(
+      (file) =>
+        file.platform === 'windows' &&
+        file.is_current
+    ) ||
+    files.find(
+      (file) => file.platform === 'windows'
+    );
+
+  const androidFile =
+    files.find(
+      (file) =>
+        file.platform === 'android' &&
+        file.is_current
+    ) ||
+    files.find(
+      (file) => file.platform === 'android'
+    );
+
+  if (windowsButton) {
+    configureDownloadButton(
+      windowsButton,
+      windowsFile,
+      app.download_url
+    );
+  }
+
+  if (androidButton) {
+    configureDownloadButton(
+      androidButton,
+      androidFile,
+      app.download_url
+    );
+  }
+
+  document.querySelectorAll('[data-file-size]').forEach(
+    (el) => {
+      const platform = el.dataset.fileSize;
+
+      const file =
+        platform === 'windows'
+          ? windowsFile
+          : androidFile;
+
+      el.textContent = file
+        ? formatBytes(getFileSize(file))
+        : 'Not available';
+    }
+  );
+}
+
+function configureDownloadButton(
+  button,
+  file,
+  fallbackUrl
+) {
+  if (!button) return;
+
+  if (file?.storage_path) {
+    button.disabled = false;
+    button.removeAttribute('aria-disabled');
+
+    button.onclick = async (event) => {
+      event.preventDefault();
+
+      const { data, error } = await supabase.storage
+        .from('app-files')
+        .createSignedUrl(file.storage_path, 3600);
+
+      if (error || !data?.signedUrl) {
+        console.error('Download URL error:', error);
+        toast('تعذر إنشاء رابط التحميل.', 'error');
+        return;
+      }
+
+      window.open(
+        data.signedUrl,
+        '_blank',
+        'noopener,noreferrer'
+      );
+    };
+
     return;
   }
 
-  setText('detailsName', app.name);
-  setText('detailsDescription', app.description);
-  setText(
-    'detailsCategory',
-    app.category_name || categories[app.category] || ''
-  );
-  setText('detailsRating', app.rating || '—');
-  setText('detailsVersion', app.version || '—');
-  setText('detailsSize', appSize(app));
-  setText('detailsPlatform', platformName(app));
+  if (fallbackUrl) {
+    button.disabled = false;
 
-  const icon = document.getElementById('detailsIcon');
+    button.onclick = (event) => {
+      event.preventDefault();
 
-  if (icon) {
-    icon.innerHTML = app.icon_url
-      ? `<img src="${escapeHTML(app.icon_url)}" alt="">`
-      : escapeHTML(app.icon_text || 'C');
+      window.open(
+        fallbackUrl,
+        '_blank',
+        'noopener,noreferrer'
+      );
+    };
+
+    return;
   }
 
-  const options = document.getElementById('downloadOptions');
+  button.disabled = true;
+  button.setAttribute('aria-disabled', 'true');
+  button.onclick = null;
+}
 
-  if (options) {
-    options.innerHTML = (app.app_files || [])
-      .map(file => `
-        <a
-          class="download-option"
-          href="${escapeHTML(publicUrl(file.storage_path))}"
-          download
-          target="_blank"
-          rel="noopener"
-        >
-          تحميل
-          ${file.platform === 'windows'
-            ? 'Windows / EXE'
-            : 'Android / APK'}
-          ·
-          ${escapeHTML(formatFileSize(file.size_bytes))}
-        </a>
-      `)
-      .join('');
+async function setupAppDetailsPage() {
+  const id = new URLSearchParams(location.search).get('id');
 
-    const main =
-      getFile(app, 'windows') ||
-      getFile(app, 'android');
+  if (!id) return;
 
-    const downloadButton =
-      document.getElementById('downloadBtn');
+  const app = await loadAppById(id);
 
-    if (main && downloadButton) {
-      downloadButton.onclick = () => {
-        window.open(
-          publicUrl(main.storage_path),
-          '_blank',
-          'noopener'
-        );
-      };
-    } else if (app.download_url && downloadButton) {
-      downloadButton.onclick = () => {
-        window.open(
-          app.download_url,
-          '_blank',
-          'noopener'
-        );
-      };
-    } else if (downloadButton) {
-      downloadButton.setAttribute('disabled', 'true');
-    }
+  if (!app) {
+    toast('التطبيق غير موجود.', 'error');
+    return;
   }
 
-  const similar =
-    document.getElementById('similarApps');
+  currentApp = app;
 
-  if (similar) {
-    similar.innerHTML = apps
-      .filter(item =>
-        item.id !== app.id &&
-        item.category === app.category
-      )
-      .slice(0, 3)
-      .map(item => `
-        <article class="similar-app-card">
-          ${appIconMarkup(item)}
-
-          <div class="similar-info">
-            <h3>
-              ${escapeHTML(item.name)}
-            </h3>
-
-            <p>
-              ${escapeHTML(
-                item.category_name ||
-                categories[item.category] ||
-                ''
-              )}
-            </p>
-          </div>
-
-          <a
-            class="mini-btn"
-            href="app.html?id=${encodeURIComponent(item.id)}"
-          >
-            عرض
-          </a>
-        </article>
-      `)
-      .join('');
-  }
+  renderAppDetails(app);
 }
 
 /* =========================================================
-   AUTH UI
-========================================================= */
+   LOGIN
+   ========================================================= */
 
 function bindPasswordToggles() {
-  document
-    .querySelectorAll('[data-toggle-password]')
-    .forEach(button => {
-      button.onclick = () => {
-        const input = document.getElementById(
-          button.dataset.togglePassword
-        );
+  document.querySelectorAll('[data-password-toggle]').forEach(
+    (button) => {
+      button.addEventListener('click', () => {
+        const targetId =
+          button.getAttribute('data-password-toggle');
+
+        const input = $(targetId);
 
         if (!input) return;
 
@@ -739,646 +778,459 @@ function bindPasswordToggles() {
           input.type === 'password'
             ? 'text'
             : 'password';
-
-        button.textContent =
-          input.type === 'password'
-            ? '👁'
-            : '🙈';
-      };
-    });
+      });
+    }
+  );
 }
 
 function showAuthMessage(message, type = 'error') {
-  const element =
-    document.getElementById('authMessage');
+  const box =
+    $('authMessage') ||
+    document.querySelector('[data-auth-message]');
 
-  if (!element) {
+  if (!box) {
     toast(message, type);
     return;
   }
 
-  element.textContent = message;
-  element.className = `auth-message ${type}`;
+  box.textContent = message;
+  box.className = `auth-message ${type}`;
+  showElement(box);
 }
-
-function translateAuthError(error) {
-  const message =
-    String(error?.message || '').toLowerCase();
-
-  if (
-    message.includes('invalid login credentials')
-  ) {
-    return 'البريد الإلكتروني أو كلمة المرور غير صحيحة.';
-  }
-
-  if (
-    message.includes('email not confirmed')
-  ) {
-    return 'البريد الإلكتروني غير مؤكد. افتح رسالة Supabase في بريدك الإلكتروني وأكد الحساب.';
-  }
-
-  if (
-    message.includes('user already registered')
-  ) {
-    return 'هذا البريد الإلكتروني مسجل بالفعل.';
-  }
-
-  if (
-    message.includes('password should be at least')
-  ) {
-    return 'كلمة المرور قصيرة جدًا.';
-  }
-
-  if (
-    message.includes('failed to fetch') ||
-    message.includes('network')
-  ) {
-    return 'تعذر الاتصال بـ Supabase. تأكد من بيانات Vercel والاتصال بالإنترنت.';
-  }
-
-  if (
-    message.includes('email rate limit')
-  ) {
-    return 'تم تجاوز حد إرسال رسائل البريد مؤقتًا. حاول مرة أخرى لاحقًا.';
-  }
-
-  return error?.message ||
-    'حدث خطأ أثناء تنفيذ العملية.';
-}
-
-/* =========================================================
-   LOGIN / REGISTER
-========================================================= */
 
 async function setupAuth() {
   const loginForm =
-    document.getElementById('loginForm');
+    $('loginForm') ||
+    document.querySelector('[data-login-form]');
 
   const registerForm =
-    document.getElementById('registerForm');
+    $('registerForm') ||
+    document.querySelector('[data-register-form]');
 
-  if (!loginForm && !registerForm) {
-    return;
-  }
-
-  bindPasswordToggles();
-
-  /* ---------------- LOGIN ---------------- */
-
-  loginForm?.addEventListener(
-    'submit',
-    async event => {
-      event.preventDefault();
-
-      if (!(await requireConfig())) {
-        return;
-      }
-
-      const emailInput =
-        document.getElementById('loginEmail');
-
-      const passwordInput =
-        document.getElementById('loginPassword');
-
-      const submitButton =
-        loginForm.querySelector(
-          'button[type="submit"]'
-        );
-
-      const email =
-        emailInput?.value.trim().toLowerCase() || '';
-
-      const password =
-        passwordInput?.value || '';
-
-      if (!email) {
-        showAuthMessage(
-          'اكتب البريد الإلكتروني.',
-          'error'
-        );
-        return;
-      }
-
-      if (!password) {
-        showAuthMessage(
-          'اكتب كلمة المرور.',
-          'error'
-        );
-        return;
-      }
-
-      if (submitButton) {
-        submitButton.disabled = true;
-        submitButton.dataset.originalText =
-          submitButton.textContent;
-        submitButton.textContent =
-          'جاري تسجيل الدخول...';
-      }
-
-      showAuthMessage(
-        'جاري تسجيل الدخول...',
-        'success'
-      );
-
-      try {
-        const {
-          data,
-          error
-        } = await supabase.auth.signInWithPassword({
-          email,
-          password
-        });
-
-        if (error) {
-          console.error(
-            'LOGIN ERROR:',
-            error
-          );
-
-          showAuthMessage(
-            translateAuthError(error),
-            'error'
-          );
-
-          return;
-        }
-
-        if (!data?.user) {
-          showAuthMessage(
-            'تم تسجيل الدخول لكن لم يتم استلام بيانات المستخدم.',
-            'error'
-          );
-          return;
-        }
-
-        currentUser = data.user;
-
-        await loadProfile();
-
-        setupNavbar();
-
-        showAuthMessage(
-          'تم تسجيل الدخول بنجاح.',
-          'success'
-        );
-
-        /*
-          تأخير بسيط حتى يتم حفظ session قبل الانتقال.
-        */
-        setTimeout(() => {
-          location.href = 'index.html';
-        }, 250);
-
-      } catch (error) {
-        console.error(
-          'LOGIN EXCEPTION:',
-          error
-        );
-
-        showAuthMessage(
-          translateAuthError(error),
-          'error'
-        );
-
-      } finally {
-        if (submitButton) {
-          submitButton.disabled = false;
-          submitButton.textContent =
-            submitButton.dataset.originalText ||
-            'تسجيل الدخول';
-        }
-      }
-    }
-  );
-
-  /* ---------------- REGISTER ---------------- */
-
-  registerForm?.addEventListener(
-    'submit',
-    async event => {
-      event.preventDefault();
-
-      if (!(await requireConfig())) {
-        return;
-      }
-
-      const name =
-        document.getElementById(
-          'registerName'
-        )?.value.trim() || '';
-
-      const email =
-        document.getElementById(
-          'registerEmail'
-        )?.value.trim().toLowerCase() || '';
-
-      const password =
-        document.getElementById(
-          'registerPassword'
-        )?.value || '';
-
-      const confirm =
-        document.getElementById(
-          'registerConfirm'
-        )?.value || '';
-
-      if (!name) {
-        showAuthMessage(
-          'اكتب اسمك.',
-          'error'
-        );
-        return;
-      }
-
-      if (!email) {
-        showAuthMessage(
-          'اكتب البريد الإلكتروني.',
-          'error'
-        );
-        return;
-      }
-
-      if (password.length < 6) {
-        showAuthMessage(
-          'كلمة المرور يجب أن تكون 6 أحرف على الأقل.',
-          'error'
-        );
-        return;
-      }
-
-      if (password !== confirm) {
-        showAuthMessage(
-          'كلمتا المرور غير متطابقتين.',
-          'error'
-        );
-        return;
-      }
-
-      try {
-        const {
-          data,
-          error
-        } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              name,
-              full_name: name
-            }
-          }
-        });
-
-        if (error) {
-          console.error(
-            'REGISTER ERROR:',
-            error
-          );
-
-          showAuthMessage(
-            translateAuthError(error),
-            'error'
-          );
-
-          return;
-        }
-
-        if (data?.session) {
-          currentUser = data.user;
-
-          await loadProfile();
-
-          location.href = 'index.html';
-          return;
-        }
-
-        showAuthMessage(
-          'تم إنشاء الحساب. راجع بريدك الإلكتروني لتأكيد الحساب ثم سجّل الدخول.',
-          'success'
-        );
-
-      } catch (error) {
-        console.error(
-          'REGISTER EXCEPTION:',
-          error
-        );
-
-        showAuthMessage(
-          translateAuthError(error),
-          'error'
-        );
-      }
-    }
-  );
-
-  /* ---------------- SWITCH LOGIN / REGISTER ---------------- */
-
-  const switchAuth =
-    document.getElementById('switchAuth');
-
-  switchAuth?.addEventListener(
-    'click',
-    event => {
-      event.preventDefault();
-
-      loginForm?.classList.toggle('hidden');
-      registerForm?.classList.toggle('hidden');
-
-      const register =
-        !registerForm?.classList.contains('hidden');
-
-      setText(
-        'authTitle',
-        register
-          ? 'إنشاء حساب'
-          : 'تسجيل الدخول'
-      );
-
-      setText(
-        'authDescription',
-        register
-          ? 'أنشئ حسابًا جديدًا في CODEX App Store.'
-          : 'ادخل إلى حسابك للوصول إلى المتجر.'
-      );
-
-      setText(
-        'switchText',
-        register
-          ? 'لديك حساب بالفعل؟ تسجيل الدخول'
-          : 'ليس لديك حساب؟ إنشاء حساب'
-      );
-    }
-  );
-}
-
-/* =========================================================
-   ACCOUNT
-========================================================= */
-
-async function setupAccount() {
-  const nameForm =
-    document.getElementById('accountNameForm');
-
-  if (!nameForm) return;
-
-  if (!currentUser) {
-    location.href = 'login.html';
-    return;
-  }
-
-  await loadProfile();
+  if (!loginForm && !registerForm) return;
 
   bindPasswordToggles();
 
-  const name =
-    getProfileName();
-
-  const email =
-    getProfileEmail();
-
-  setText(
-    'accountName',
-    name
-  );
-
-  setText(
-    'accountEmail',
-    email
-  );
-
-  setText(
-    'accountRole',
-    getProfileRole() === 'admin'
-      ? 'Admin'
-      : 'User'
-  );
-
-  setText(
-    'accountCreated',
-    currentProfile?.created_at
-      ? new Date(
-          currentProfile.created_at
-        ).toLocaleDateString('ar-EG')
-      : '—'
-  );
-
-  const nameInput =
-    document.getElementById(
-      'accountNameInput'
-    );
-
-  if (nameInput) {
-    nameInput.value = name;
-  }
-
-  const emailInput =
-    document.getElementById(
-      'accountEmailInput'
-    );
-
-  if (emailInput) {
-    emailInput.value = email;
-  }
-
-  /* ---------------- UPDATE NAME ---------------- */
-
-  nameForm.onsubmit = async event => {
+  loginForm?.addEventListener('submit', async (event) => {
     event.preventDefault();
 
-    const newName =
-      nameInput?.value.trim() || '';
+    const email =
+      $('loginEmail')?.value.trim().toLowerCase();
 
-    if (!newName) {
-      toast(
-        'اكتب الاسم الجديد.',
+    const password =
+      $('loginPassword')?.value || '';
+
+    if (!email || !password) {
+      showAuthMessage(
+        'اكتب البريد الإلكتروني وكلمة المرور.',
         'error'
       );
       return;
     }
 
-    try {
-      /*
-        نحدث العمودين حتى يظل النظام متوافقًا
-        سواء كان الكود القديم يستخدم name
-        أو الـschema الأصلي يستخدم full_name.
-      */
-      const updateData = {
-        name: newName,
-        full_name: newName,
-        updated_at: new Date().toISOString()
-      };
-
-      const {
-        error
-      } = await supabase
-        .from('profiles')
-        .update(updateData)
-        .eq('id', currentUser.id);
-
-      if (error) {
-        console.error(
-          'UPDATE PROFILE ERROR:',
-          error
-        );
-
-        /*
-          لو name غير موجود، نحاول full_name فقط.
-        */
-        const fallback =
-          await supabase
-            .from('profiles')
-            .update({
-              full_name: newName,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', currentUser.id);
-
-        if (fallback.error) {
-          throw error;
-        }
-      }
-
-      await loadProfile();
-
-      setupNavbar();
-
-      setText(
-        'accountName',
-        getProfileName()
+    const submitButton =
+      loginForm.querySelector(
+        'button[type="submit"]'
       );
 
-      toast(
-        'تم تحديث الاسم بنجاح.'
-      );
+    if (submitButton) {
+      submitButton.disabled = true;
+    }
 
-    } catch (error) {
-      console.error(
-        'PROFILE UPDATE EXCEPTION:',
-        error
-      );
+    const { error } =
+      await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
 
-      toast(
-        translateAuthError(error),
+    if (submitButton) {
+      submitButton.disabled = false;
+    }
+
+    if (error) {
+      console.error('Login error:', error);
+
+      showAuthMessage(
+        translateAuthError(error.message),
         'error'
       );
+
+      return;
     }
-  };
 
-  /* ---------------- UPDATE EMAIL ---------------- */
-
-  document
-    .getElementById('accountEmailForm')
-    ?.addEventListener(
-      'submit',
-      async event => {
-        event.preventDefault();
-
-        const newEmail =
-          emailInput?.value.trim().toLowerCase() ||
-          '';
-
-        if (!newEmail) {
-          toast(
-            'اكتب البريد الإلكتروني.',
-            'error'
-          );
-          return;
-        }
-
-        const {
-          error
-        } = await supabase.auth.updateUser({
-          email: newEmail
-        });
-
-        if (error) {
-          toast(
-            translateAuthError(error),
-            'error'
-          );
-          return;
-        }
-
-        /*
-          غالبًا Supabase يطلب تأكيد البريد الجديد.
-        */
-        await supabase
-          .from('profiles')
-          .update({
-            email: newEmail,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', currentUser.id);
-
-        await loadProfile();
-
-        toast(
-          'تم طلب تحديث البريد. قد تحتاج لتأكيده من البريد الإلكتروني.'
-        );
-      }
+    showAuthMessage(
+      'تم تسجيل الدخول بنجاح.',
+      'success'
     );
 
-  /* ---------------- UPDATE PASSWORD ---------------- */
+    setTimeout(() => {
+      location.href = 'index.html';
+    }, 400);
+  });
 
-  document
-    .getElementById('accountPasswordForm')
-    ?.addEventListener(
-      'submit',
-      async event => {
-        event.preventDefault();
+  registerForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
 
-        const password =
-          document.getElementById(
-            'newPassword'
-          )?.value || '';
+    const name =
+      $('registerName')?.value.trim() ||
+      $('signupName')?.value.trim() ||
+      '';
 
-        const confirm =
-          document.getElementById(
-            'confirmPassword'
-          )?.value || '';
+    const email =
+      $('registerEmail')?.value.trim().toLowerCase() ||
+      $('signupEmail')?.value.trim().toLowerCase() ||
+      '';
 
-        if (password.length < 6) {
-          toast(
-            'كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل.',
-            'error'
-          );
-          return;
+    const password =
+      $('registerPassword')?.value ||
+      $('signupPassword')?.value ||
+      '';
+
+    const confirmPassword =
+      $('registerConfirmPassword')?.value ||
+      $('signupConfirmPassword')?.value ||
+      '';
+
+    if (!email || !password) {
+      showAuthMessage(
+        'أدخل البريد الإلكتروني وكلمة المرور.',
+        'error'
+      );
+      return;
+    }
+
+    if (password.length < 6) {
+      showAuthMessage(
+        'كلمة المرور يجب أن تكون 6 أحرف على الأقل.',
+        'error'
+      );
+      return;
+    }
+
+    if (
+      confirmPassword &&
+      password !== confirmPassword
+    ) {
+      showAuthMessage(
+        'كلمتا المرور غير متطابقتين.',
+        'error'
+      );
+      return;
+    }
+
+    const submitButton =
+      registerForm.querySelector(
+        'button[type="submit"]'
+      );
+
+    if (submitButton) {
+      submitButton.disabled = true;
+    }
+
+    const { data, error } =
+      await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            name
+          }
         }
+      });
 
-        if (password !== confirm) {
-          toast(
-            'كلمتا المرور غير متطابقتين.',
-            'error'
-          );
-          return;
-        }
+    if (submitButton) {
+      submitButton.disabled = false;
+    }
 
-        const {
-          error
-        } = await supabase.auth.updateUser({
-          password
-        });
+    if (error) {
+      console.error('Register error:', error);
 
-        if (error) {
-          toast(
-            translateAuthError(error),
-            'error'
-          );
-          return;
-        }
+      showAuthMessage(
+        translateAuthError(error.message),
+        'error'
+      );
 
-        event.target.reset();
+      return;
+    }
 
-        toast(
-          'تم تغيير كلمة المرور بنجاح.'
-        );
-      }
-    );
+    if (data?.session) {
+      await ensureProfile();
+
+      showAuthMessage(
+        'تم إنشاء الحساب بنجاح.',
+        'success'
+      );
+
+      setTimeout(() => {
+        location.href = 'index.html';
+      }, 500);
+    } else {
+      showAuthMessage(
+        'تم إنشاء الحساب. راجع بريدك الإلكتروني لتأكيد الحساب.',
+        'success'
+      );
+    }
+  });
 }
 
 /* =========================================================
-   ADMIN
-========================================================= */
+   ACCOUNT
+   ========================================================= */
+
+async function setupAccountPage() {
+  const form =
+    $('accountForm') ||
+    document.querySelector('[data-account-form]');
+
+  if (!form || !currentUser) return;
+
+  const nameInput =
+    $('accountName') ||
+    $('profileName') ||
+    form.querySelector('[name="name"]');
+
+  const emailInput =
+    $('accountEmail') ||
+    $('profileEmail') ||
+    form.querySelector('[name="email"]');
+
+  if (nameInput) {
+    nameInput.value =
+      currentProfile?.name ||
+      currentProfile?.full_name ||
+      currentUser.user_metadata?.name ||
+      '';
+  }
+
+  if (emailInput) {
+    emailInput.value =
+      currentUser.email ||
+      currentProfile?.email ||
+      '';
+  }
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+
+    const name =
+      nameInput?.value.trim() || '';
+
+    const { error: authError } =
+      await supabase.auth.updateUser({
+        data: {
+          name
+        }
+      });
+
+    if (authError) {
+      console.error('User update error:', authError);
+
+      toast(
+        translateAuthError(authError.message),
+        'error'
+      );
+
+      return;
+    }
+
+    const profilePayload = {
+      name,
+      full_name: name,
+      email: currentUser.email || ''
+    };
+
+    const { error: profileError } =
+      await supabase
+        .from('profiles')
+        .update(profilePayload)
+        .eq('id', currentUser.id);
+
+    if (profileError) {
+      console.error(
+        'Profile update error:',
+        profileError
+      );
+
+      toast(
+        'تم تحديث الحساب ولكن تعذر تحديث الملف الشخصي.',
+        'error'
+      );
+
+      await loadProfile();
+      renderUserUI();
+
+      return;
+    }
+
+    await loadProfile();
+    renderUserUI();
+
+    toast('تم حفظ البيانات بنجاح.');
+  });
+}
+
+/* =========================================================
+   STORAGE
+   ========================================================= */
+
+async function uploadStorageFile(
+  file,
+  bucket,
+  folder = ''
+) {
+  if (!file) return null;
+
+  const safeName = file.name
+    .replace(/[^a-zA-Z0-9._-]/g, '_');
+
+  const path = folder
+    ? `${folder}/${Date.now()}_${safeName}`
+    : `${Date.now()}_${safeName}`;
+
+  const { error } = await supabase.storage
+    .from(bucket)
+    .upload(path, file, {
+      upsert: false,
+      contentType: file.type || undefined
+    });
+
+  if (error) {
+    console.error('Storage upload error:', error);
+    throw error;
+  }
+
+  const { data } = supabase.storage
+    .from(bucket)
+    .getPublicUrl(path);
+
+  return {
+    path,
+    publicUrl: data?.publicUrl || null
+  };
+}
+
+/* =========================================================
+   ADMIN DASHBOARD
+   ========================================================= */
+
+async function loadAdminApps() {
+  const { data, error } = await supabase
+    .from('apps')
+    .select(`
+      *,
+      categories (
+        id,
+        name,
+        slug
+      )
+    `)
+    .order('created_at', {
+      ascending: false
+    });
+
+  if (error) {
+    console.error('Admin apps error:', error);
+    return [];
+  }
+
+  return data || [];
+}
+
+function renderAdminApps(apps) {
+  const container =
+    $('adminApps') ||
+    $('adminAppsList') ||
+    document.querySelector('[data-admin-apps]');
+
+  if (!container) return;
+
+  if (!apps.length) {
+    container.innerHTML = `
+      <div class="empty-state">
+        No applications yet.
+      </div>
+    `;
+
+    return;
+  }
+
+  container.innerHTML = apps
+    .map((app) => {
+      return `
+        <div
+          class="admin-app-row"
+          data-id="${escapeHtml(app.id)}"
+        >
+          <div class="admin-app-main">
+            <div class="admin-app-icon">
+              ${getAppIcon(app)}
+            </div>
+
+            <div>
+              <strong>
+                ${escapeHtml(app.name || 'Unnamed App')}
+              </strong>
+
+              <div>
+                ${escapeHtml(app.version || '1.0.0')}
+              </div>
+            </div>
+          </div>
+
+          <div class="admin-app-status">
+            ${
+              app.is_published
+                ? 'Published'
+                : 'Draft'
+            }
+          </div>
+
+          <div class="admin-app-actions">
+            <button
+              type="button"
+              data-edit-app="${escapeHtml(app.id)}"
+            >
+              Edit
+            </button>
+
+            <button
+              type="button"
+              data-delete-app="${escapeHtml(app.id)}"
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      `;
+    })
+    .join('');
+
+  container
+    .querySelectorAll('[data-edit-app]')
+    .forEach((button) => {
+      button.addEventListener('click', () => {
+        const id =
+          button.getAttribute('data-edit-app');
+
+        openAppEditor(id);
+      });
+    });
+
+  container
+    .querySelectorAll('[data-delete-app]')
+    .forEach((button) => {
+      button.addEventListener('click', () => {
+        const id =
+          button.getAttribute('data-delete-app');
+
+        deleteApp(id);
+      });
+    });
+}
+
+/* =========================================================
+   ADMIN AUTH CHECK
+   ========================================================= */
 
 async function requireAdmin() {
   if (!currentUser) {
@@ -1386,12 +1238,18 @@ async function requireAdmin() {
     return false;
   }
 
-  await loadProfile();
+  await ensureProfile();
 
-  const admin = await isAdmin();
+  if (!isAdmin()) {
+    toast(
+      'ليس لديك صلاحية دخول لوحة الإدارة.',
+      'error'
+    );
 
-  if (!admin) {
-    location.href = 'login.html';
+    setTimeout(() => {
+      location.href = 'index.html';
+    }, 500);
+
     return false;
   }
 
@@ -1399,1593 +1257,741 @@ async function requireAdmin() {
 }
 
 /* =========================================================
-   STORAGE
-========================================================= */
+   APP EDITOR
+   ========================================================= */
 
-async function uploadStorageFile(file, path) {
-  const {
-    error
-  } = await supabase.storage
-    .from('app-files')
-    .upload(
-      path,
-      file,
-      {
-        upsert: true,
-        contentType:
-          file.type ||
-          'application/octet-stream'
-      }
-    );
+async function openAppEditor(appId = null) {
+  const modal =
+    $('appEditorModal') ||
+    document.querySelector('[data-app-editor]');
 
-  if (error) {
-    throw error;
+  if (!modal) {
+    if (appId) {
+      location.href =
+        `admin.html?edit=${encodeURIComponent(appId)}`;
+    }
+
+    return;
   }
 
-  return path;
-}
+  editingAppId = appId;
 
-async function uploadIcon(file, appId) {
-  if (!file) return null;
+  let app = null;
 
-  const extension =
-    (
-      file.name.split('.').pop() ||
-      'png'
-    ).toLowerCase();
+  if (appId) {
+    app = await loadAppById(appId);
 
-  const path =
-    `icons/${appId}/${Date.now()}.${extension}`;
-
-  await uploadStorageFile(
-    file,
-    path
-  );
-
-  return publicUrl(path);
-}
-
-async function saveAppFile(
-  appId,
-  platform,
-  file,
-  existing
-) {
-  if (!file) {
-    return existing;
-  }
-
-  const extension =
-    (
-      file.name.split('.').pop() ||
-      platform
-    ).toLowerCase();
-
-  const safeName =
-    file.name.replace(
-      /[^a-zA-Z0-9._-]/g,
-      '_'
-    );
-
-  const path =
-    `apps/${appId}/${platform}/${Date.now()}-${safeName}`;
-
-  await uploadStorageFile(
-    file,
-    path
-  );
-
-  if (existing?.storage_path) {
-    await supabase.storage
-      .from('app-files')
-      .remove([
-        existing.storage_path
-      ]);
-  }
-
-  const row = {
-    app_id: appId,
-    platform,
-    file_name: file.name,
-    storage_path: path,
-    mime_type:
-      file.type ||
-      'application/octet-stream',
-    size_bytes: file.size
-  };
-
-  /*
-    نحاول upsert أولاً.
-    يتطلب وجود unique constraint على
-    app_id + platform.
-  */
-  let result =
-    await supabase
-      .from('app_files')
-      .upsert(
-        row,
-        {
-          onConflict:
-            'app_id,platform'
-        }
-      )
-      .select()
-      .single();
-
-  /*
-    fallback لو الـunique constraint غير موجود.
-  */
-  if (result.error) {
-    console.warn(
-      'UPSERT failed, trying update/insert:',
-      result.error
-    );
-
-    const existingFile =
-      await supabase
-        .from('app_files')
-        .select('*')
-        .eq('app_id', appId)
-        .eq('platform', platform)
-        .maybeSingle();
-
-    if (existingFile.data) {
-      result =
-        await supabase
-          .from('app_files')
-          .update({
-            file_name: row.file_name,
-            storage_path: row.storage_path,
-            mime_type: row.mime_type,
-            size_bytes: row.size_bytes,
-            version: row.version
-          })
-          .eq('id', existingFile.data.id)
-          .select()
-          .single();
-    } else {
-      result =
-        await supabase
-          .from('app_files')
-          .insert(row)
-          .select()
-          .single();
+    if (!app) {
+      toast('تعذر تحميل التطبيق.', 'error');
+      return;
     }
   }
 
-  if (result.error) {
-    throw result.error;
+  setEditorValue(
+    ['appName', 'editorAppName'],
+    app?.name || ''
+  );
+
+  setEditorValue(
+    ['appSlug', 'editorAppSlug'],
+    app?.slug || ''
+  );
+
+  setEditorValue(
+    ['appDescription', 'editorAppDescription'],
+    app?.description || ''
+  );
+
+  setEditorValue(
+    ['appVersion', 'editorAppVersion'],
+    app?.version || '1.0.0'
+  );
+
+  setEditorValue(
+    ['appDeveloper', 'editorAppDeveloper'],
+    app?.developer_name || ''
+  );
+
+  setEditorValue(
+    ['appCategory', 'editorAppCategory'],
+    normalizeCategory(app)
+  );
+
+  setEditorValue(
+    ['appDownloadUrl', 'editorAppDownloadUrl'],
+    app?.download_url || ''
+  );
+
+  setEditorChecked(
+    ['appPublished', 'editorAppPublished'],
+    app?.is_published ?? true
+  );
+
+  showElement(modal);
+}
+
+function setEditorValue(ids, value) {
+  for (const id of ids) {
+    const input = $(id);
+
+    if (input) {
+      input.value = value;
+      return;
+    }
+  }
+}
+
+function setEditorChecked(ids, value) {
+  for (const id of ids) {
+    const input = $(id);
+
+    if (input) {
+      input.checked = Boolean(value);
+      return;
+    }
+  }
+}
+
+function getEditorValue(ids) {
+  for (const id of ids) {
+    const input = $(id);
+
+    if (input) {
+      return input.value;
+    }
   }
 
-  return result.data;
+  return '';
+}
+
+function getEditorChecked(ids) {
+  for (const id of ids) {
+    const input = $(id);
+
+    if (input) {
+      return input.checked;
+    }
+  }
+
+  return false;
+}
+
+function closeAppEditor() {
+  const modal =
+    $('appEditorModal') ||
+    document.querySelector('[data-app-editor]');
+
+  hideElement(modal);
+
+  editingAppId = null;
+}
+
+async function saveAppEditor() {
+  if (!isAdmin()) {
+    toast('ليس لديك صلاحية.', 'error');
+    return;
+  }
+
+  const name =
+    getEditorValue([
+      'appName',
+      'editorAppName'
+    ]).trim();
+
+  const slug =
+    getEditorValue([
+      'appSlug',
+      'editorAppSlug'
+    ]).trim();
+
+  const description =
+    getEditorValue([
+      'appDescription',
+      'editorAppDescription'
+    ]).trim();
+
+  const version =
+    getEditorValue([
+      'appVersion',
+      'editorAppVersion'
+    ]).trim() || '1.0.0';
+
+  const developer =
+    getEditorValue([
+      'appDeveloper',
+      'editorAppDeveloper'
+    ]).trim();
+
+  const category =
+    getEditorValue([
+      'appCategory',
+      'editorAppCategory'
+    ]).trim();
+
+  const downloadUrl =
+    getEditorValue([
+      'appDownloadUrl',
+      'editorAppDownloadUrl'
+    ]).trim();
+
+  const isPublished =
+    getEditorChecked([
+      'appPublished',
+      'editorAppPublished'
+    ]);
+
+  if (!name) {
+    toast('اكتب اسم التطبيق.', 'error');
+    return;
+  }
+
+  let generatedSlug = slug;
+
+  if (!generatedSlug) {
+    generatedSlug = name
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  }
+
+  const payload = {
+    name,
+    slug: generatedSlug,
+    description,
+    version,
+    developer_name: developer,
+    category,
+    category_name: category,
+    download_url: downloadUrl || null,
+    is_published: isPublished
+  };
+
+  let result;
+
+  if (editingAppId) {
+    result = await supabase
+      .from('apps')
+      .update(payload)
+      .eq('id', editingAppId)
+      .select()
+      .single();
+  } else {
+    result = await supabase
+      .from('apps')
+      .insert({
+        ...payload,
+        created_by: currentUser.id,
+        downloads_count: 0
+      })
+      .select()
+      .single();
+  }
+
+  if (result.error) {
+    console.error('Save app error:', result.error);
+
+    toast(
+      `تعذر حفظ التطبيق: ${result.error.message}`,
+      'error'
+    );
+
+    return;
+  }
+
+  const app = result.data;
+
+  await handleAppFilesUpload(app.id);
+
+  closeAppEditor();
+
+  toast(
+    editingAppId
+      ? 'تم تحديث التطبيق.'
+      : 'تم إنشاء التطبيق.'
+  );
+
+  const apps = await loadAdminApps();
+
+  renderAdminApps(apps);
+}
+
+async function handleAppFilesUpload(appId) {
+  if (!appId) return;
+
+  const windowsInput =
+    $('windowsFile') ||
+    $('windowsAppFile') ||
+    document.querySelector(
+      'input[type="file"][data-platform="windows"]'
+    );
+
+  const androidInput =
+    $('androidFile') ||
+    $('androidAppFile') ||
+    document.querySelector(
+      'input[type="file"][data-platform="android"]'
+    );
+
+  const files = [
+    {
+      input: windowsInput,
+      platform: 'windows'
+    },
+    {
+      input: androidInput,
+      platform: 'android'
+    }
+  ];
+
+  for (const item of files) {
+    const file = item.input?.files?.[0];
+
+    if (!file) continue;
+
+    try {
+      const uploaded = await uploadStorageFile(
+        file,
+        'app-files',
+        `${appId}/${item.platform}`
+      );
+
+      if (!uploaded) continue;
+
+      const row = {
+        app_id: appId,
+        platform: item.platform,
+        file_name: file.name,
+        storage_path: uploaded.path,
+        mime_type: file.type || null,
+        file_size: file.size,
+        size_bytes: file.size,
+        version:
+          getEditorValue([
+            'appVersion',
+            'editorAppVersion'
+          ]) || '1.0.0',
+        is_current: true,
+        created_by: currentUser.id
+      };
+
+      const { error } = await supabase
+        .from('app_files')
+        .upsert(row, {
+          onConflict: 'app_id,platform'
+        });
+
+      if (error) {
+        console.error(
+          'App file database error:',
+          error
+        );
+
+        toast(
+          `تم رفع الملف لكن تعذر حفظه: ${error.message}`,
+          'error'
+        );
+      }
+    } catch (error) {
+      console.error('File upload error:', error);
+
+      toast(
+        `تعذر رفع ملف ${item.platform}.`,
+        'error'
+      );
+    }
+  }
 }
 
 /* =========================================================
-   CREATE APP
-========================================================= */
+   DELETE APP
+   ========================================================= */
 
-async function createAppRecord(form) {
-  if (!(await requireAdmin())) return;
+async function deleteApp(id) {
+  if (!id) return;
 
-  const name =
-    document.getElementById(
-      'newAppName'
-    )?.value.trim() || '';
-
-  const description =
-    document.getElementById(
-      'newAppDescription'
-    )?.value.trim() || '';
-
-  const category =
-    document.getElementById(
-      'newAppCategory'
-    )?.value || '';
-
-  const version =
-    document.getElementById(
-      'newAppVersion'
-    )?.value.trim() || '';
-
-  const iconText =
-    document.getElementById(
-      'newAppIcon'
-    )?.value.trim() || 'C';
-
-  const exe =
-    document.getElementById(
-      'newAppExe'
-    )?.files?.[0];
-
-  const apk =
-    document.getElementById(
-      'newAppApk'
-    )?.files?.[0];
-
-  const icon =
-    document.getElementById(
-      'newAppIconFile'
-    )?.files?.[0];
-
-  if (!name) {
-    toast(
-      'اكتب اسم التطبيق.',
-      'error'
-    );
+  if (!isAdmin()) {
+    toast('ليس لديك صلاحية.', 'error');
     return;
   }
 
-  if (!version) {
-    toast(
-      'اكتب إصدار التطبيق.',
-      'error'
-    );
-    return;
-  }
+  const confirmed = window.confirm(
+    'هل أنت متأكد من حذف هذا التطبيق؟'
+  );
 
-  if (!exe && !apk) {
-    toast(
-      'ارفع EXE أو APK على الأقل.',
-      'error'
-    );
-    return;
-  }
+  if (!confirmed) return;
 
-  const appPayload = {
-    name,
-    description,
-    category,
-    category_name:
-      categories[category] || category,
-    version,
-    icon_text: iconText,
-    created_by: currentUser.id
-  };
-
-  const {
-    data,
-    error
-  } = await supabase
-    .from('apps')
-    .insert(appPayload)
-    .select()
-    .single();
-
-  if (error) {
-    console.error(
-      'CREATE APP ERROR:',
-      error
-    );
-
-    toast(
-      error.message,
-      'error'
-    );
-
-    return;
-  }
-
-  try {
-    if (icon) {
-      const iconUrl =
-        await uploadIcon(
-          icon,
-          data.id
-        );
-
-      await supabase
-        .from('apps')
-        .update({
-          icon_url: iconUrl
-        })
-        .eq('id', data.id);
-    }
-
-    if (exe) {
-      await saveAppFile(
-        data.id,
-        'windows',
-        exe,
-        null
-      );
-    }
-
-    if (apk) {
-      await saveAppFile(
-        data.id,
-        'android',
-        apk,
-        null
-      );
-    }
-
-    const {
-      data: files
-    } = await supabase
-      .from('app_files')
-      .select('*')
-      .eq('app_id', data.id);
-
-    const totalSize =
-      (files || []).reduce(
-        (total, file) =>
-          total +
-          Number(file.size_bytes || 0),
-        0
-      );
-
-    let platform = 'Windows';
-
-    if (
-      (files || []).length === 2
-    ) {
-      platform =
-        'Windows + Android';
-    } else if (
-      files?.[0]?.platform ===
-      'android'
-    ) {
-      platform = 'Android';
-    }
-
+  const { error: filesError } =
     await supabase
-      .from('apps')
-      .update({
-        total_size_bytes:
-          totalSize,
-        platform
-      })
-      .eq('id', data.id);
+      .from('app_files')
+      .delete()
+      .eq('app_id', id);
 
-    await refreshDashboard();
-
-    form.reset();
-
-    setText(
-      'newAppSize',
-      'سيتم حسابه تلقائيًا'
-    );
-
-    setText(
-      'newAppPlatform',
-      'سيتم تحديده تلقائيًا'
-    );
-
-    toast(
-      'تم رفع التطبيق بنجاح.'
-    );
-
-  } catch (error) {
+  if (filesError) {
     console.error(
-      'APP UPLOAD ERROR:',
-      error
+      'Delete app files error:',
+      filesError
     );
+  }
 
+  const { error } =
     await supabase
       .from('apps')
       .delete()
-      .eq('id', data.id);
-
-    toast(
-      error.message ||
-      'فشل رفع الملفات.',
-      'error'
-    );
-  }
-}
-
-/* =========================================================
-   DASHBOARD
-========================================================= */
-
-async function renderDashboard() {
-  await loadApps();
-
-  setText(
-    'totalApps',
-    apps.length
-  );
-
-  const {
-    count: usersCount
-  } = await supabase
-    .from('profiles')
-    .select(
-      '*',
-      {
-        count: 'exact',
-        head: true
-      }
-    );
-
-  const {
-    count: adminsCount
-  } = await supabase
-    .from('profiles')
-    .select(
-      '*',
-      {
-        count: 'exact',
-        head: true
-      }
-    )
-    .eq(
-      'role',
-      'admin'
-    );
-
-  setText(
-    'totalUsers',
-    usersCount || 0
-  );
-
-  setText(
-    'totalAdmins',
-    adminsCount || 0
-  );
-
-  const box =
-    document.getElementById(
-      'adminAppsList'
-    );
-
-  if (box) {
-    box.innerHTML = apps
-      .map(app => `
-        <div class="admin-app-item">
-
-          ${appIconMarkup(
-            app,
-            'admin-app-icon'
-          )}
-
-          <div class="admin-app-info">
-
-            <strong>
-              ${escapeHTML(app.name)}
-            </strong>
-
-            <span>
-              ${escapeHTML(
-                app.category_name ||
-                categories[app.category] ||
-                ''
-              )}
-
-              · v${escapeHTML(
-                app.version || ''
-              )}
-
-              · ${escapeHTML(
-                appSize(app)
-              )}
-
-              · ${escapeHTML(
-                platformName(app)
-              )}
-            </span>
-
-            ${fileBadgeMarkup(app)}
-
-          </div>
-
-          <div class="admin-actions">
-
-            <a
-              class="mini-btn"
-              href="app.html?id=${encodeURIComponent(app.id)}"
-              target="_blank"
-              rel="noopener"
-            >
-              فتح الصفحة
-            </a>
-
-            <button
-              class="mini-btn"
-              data-edit-app="${escapeHTML(app.id)}"
-              type="button"
-            >
-              تعديل
-            </button>
-
-            <button
-              class="delete-app-btn"
-              data-delete-app="${escapeHTML(app.id)}"
-              type="button"
-            >
-              حذف
-            </button>
-
-          </div>
-
-        </div>
-      `)
-      .join('');
-  }
-
-  await renderUsers();
-}
-
-/* =========================================================
-   USERS
-========================================================= */
-
-async function renderUsers() {
-  const box =
-    document.getElementById(
-      'usersList'
-    );
-
-  if (!box) return;
-
-  const {
-    data,
-    error
-  } = await supabase
-    .from('profiles')
-    .select('*')
-    .order(
-      'created_at',
-      {
-        ascending: false
-      }
-    );
+      .eq('id', id);
 
   if (error) {
-    console.error(
-      'USERS ERROR:',
-      error
-    );
+    console.error('Delete app error:', error);
 
     toast(
-      error.message,
+      `تعذر حذف التطبيق: ${error.message}`,
       'error'
     );
 
     return;
   }
 
-  box.innerHTML =
-    (data || [])
-      .map(user => {
-        const name =
-          user.name ||
-          user.full_name ||
-          'User';
+  toast('تم حذف التطبيق.');
 
-        return `
-          <div class="user-item">
+  const apps = await loadAdminApps();
 
-            <div class="user-avatar">
-              ${escapeHTML(
-                name.charAt(0)
-              )}
-            </div>
-
-            <div class="user-info">
-
-              <strong>
-                ${escapeHTML(name)}
-              </strong>
-
-              <span>
-                ${escapeHTML(
-                  user.email || ''
-                )}
-              </span>
-
-              <small>
-                إنشاء:
-                ${
-                  user.created_at
-                    ? new Date(
-                        user.created_at
-                      ).toLocaleDateString(
-                        'ar-EG'
-                      )
-                    : '—'
-                }
-              </small>
-
-            </div>
-
-            <span class="user-role">
-              ${
-                user.role === 'admin'
-                  ? 'ADMIN'
-                  : 'USER'
-              }
-            </span>
-
-            <div class="user-actions">
-
-              <button
-                class="mini-btn"
-                data-reset-user="${escapeHTML(user.id)}"
-                type="button"
-              >
-                تغيير كلمة المرور
-              </button>
-
-              ${
-                user.id !== currentUser?.id
-                  ? `
-                    <button
-                      class="delete-user-btn"
-                      data-delete-user="${escapeHTML(user.id)}"
-                      type="button"
-                    >
-                      حذف
-                    </button>
-                  `
-                  : ''
-              }
-
-            </div>
-
-          </div>
-        `;
-      })
-      .join('');
-}
-
-async function refreshDashboard() {
-  await renderDashboard();
+  renderAdminApps(apps);
 }
 
 /* =========================================================
-   ADMIN CREATE
-========================================================= */
+   ADMIN PAGE
+   ========================================================= */
 
-async function addAdmin(event) {
-  event.preventDefault();
-
-  if (!(await requireAdmin())) return;
-
-  const name =
-    document.getElementById(
-      'adminNameInput'
-    )?.value.trim() || '';
-
-  const email =
-    document.getElementById(
-      'adminEmailInput'
-    )?.value.trim().toLowerCase() || '';
-
-  const password =
-    document.getElementById(
-      'adminPasswordInput'
-    )?.value || '';
-
-  const confirm =
-    document.getElementById(
-      'adminPasswordConfirm'
-    )?.value || '';
-
-  if (!name) {
-    toast(
-      'اكتب اسم الـAdmin.',
-      'error'
+async function setupAdminPage() {
+  const isAdminPage =
+    Boolean(
+      $('adminDashboard') ||
+      document.querySelector('[data-admin-page]')
     );
-    return;
-  }
 
-  if (!email) {
-    toast(
-      'اكتب بريد الـAdmin.',
-      'error'
+  if (!isAdminPage) return;
+
+  const allowed = await requireAdmin();
+
+  if (!allowed) return;
+
+  const apps = await loadAdminApps();
+
+  renderAdminApps(apps);
+
+  const addButtons = document.querySelectorAll(
+    '[data-add-app], #addAppButton'
+  );
+
+  addButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      openAppEditor();
+    });
+  });
+
+  const saveButtons = document.querySelectorAll(
+    '[data-save-app], #saveAppButton'
+  );
+
+  saveButtons.forEach((button) => {
+    button.addEventListener('click', saveAppEditor);
+  });
+
+  const closeButtons = document.querySelectorAll(
+    '[data-close-app-editor], #closeAppEditor'
+  );
+
+  closeButtons.forEach((button) => {
+    button.addEventListener(
+      'click',
+      closeAppEditor
     );
-    return;
-  }
+  });
 
-  if (
-    password.length < 6 ||
-    password !== confirm
-  ) {
-    toast(
-      'تحقق من كلمة المرور.',
-      'error'
-    );
-    return;
-  }
+  const editId =
+    new URLSearchParams(location.search).get('edit');
 
-  try {
-    const {
-      data,
-      error
-    } = await supabase.functions.invoke(
-      'create-admin',
-      {
-        body: {
-          name,
-          email,
-          password
-        }
+  if (editId) {
+    await openAppEditor(editId);
+  }
+}
+
+/* =========================================================
+   SEARCH
+   ========================================================= */
+
+function setupGlobalSearch() {
+  const inputs = document.querySelectorAll(
+    '[data-global-search]'
+  );
+
+  inputs.forEach((input) => {
+    input.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+
+      const value = input.value.trim();
+
+      if (!value) {
+        location.href = 'index.html';
+        return;
+      }
+
+      location.href =
+        `index.html?search=${encodeURIComponent(value)}`;
+    });
+  });
+}
+
+async function setupSearchFromUrl() {
+  const input =
+    $('searchInput') ||
+    $('appSearch') ||
+    document.querySelector('[data-app-search]');
+
+  if (!input) return;
+
+  const value =
+    new URLSearchParams(location.search).get('search');
+
+  if (!value) return;
+
+  input.value = value;
+}
+
+/* =========================================================
+   CATEGORY FILTER
+   ========================================================= */
+
+function setupCategoryOptions() {
+  const selects = document.querySelectorAll(
+    '[data-category-filter], #categoryFilter, #appCategory'
+  );
+
+  selects.forEach((select) => {
+    if (select.options.length > 1) return;
+
+    Object.entries(CATEGORY_MAP).forEach(
+      ([value, label]) => {
+        const option =
+          document.createElement('option');
+
+        option.value = value;
+        option.textContent = label;
+
+        select.appendChild(option);
       }
     );
-
-    if (
-      error ||
-      data?.error
-    ) {
-      toast(
-        data?.error ||
-        error?.message ||
-        'فشل إنشاء Admin.',
-        'error'
-      );
-      return;
-    }
-
-    event.target.reset();
-
-    await renderDashboard();
-
-    toast(
-      'تم إنشاء Admin جديد.'
-    );
-
-  } catch (error) {
-    console.error(
-      'CREATE ADMIN ERROR:',
-      error
-    );
-
-    toast(
-      error.message ||
-      'فشل إنشاء Admin.',
-      'error'
-    );
-  }
+  });
 }
 
 /* =========================================================
-   DELETE USER
-========================================================= */
+   MODALS
+   ========================================================= */
 
-async function deleteUser(id) {
-  if (!(await requireAdmin())) return;
-
-  if (
-    !confirm(
-      'هل تريد حذف هذا الحساب؟'
-    )
-  ) {
-    return;
-  }
-
-  const {
-    data,
-    error
-  } = await supabase.functions.invoke(
-    'admin-delete-user',
-    {
-      body: {
-        userId: id
-      }
-    }
-  );
-
-  if (
-    error ||
-    data?.error
-  ) {
-    toast(
-      data?.error ||
-      error?.message ||
-      'فشل حذف المستخدم.',
-      'error'
-    );
-    return;
-  }
-
-  await renderDashboard();
-
-  toast(
-    'تم حذف الحساب.'
-  );
-}
-
-/* =========================================================
-   RESET USER PASSWORD
-========================================================= */
-
-async function resetUserPassword(id) {
-  if (!(await requireAdmin())) return;
-
-  const password =
-    prompt(
-      'اكتب كلمة المرور الجديدة (6 أحرف على الأقل):'
-    );
-
-  if (!password) return;
-
-  if (password.length < 6) {
-    toast(
-      'كلمة المرور قصيرة.',
-      'error'
-    );
-    return;
-  }
-
-  const {
-    data,
-    error
-  } = await supabase.functions.invoke(
-    'admin-reset-password',
-    {
-      body: {
-        userId: id,
-        password
-      }
-    }
-  );
-
-  if (
-    error ||
-    data?.error
-  ) {
-    toast(
-      data?.error ||
-      error?.message ||
-      'فشل تغيير كلمة المرور.',
-      'error'
-    );
-    return;
-  }
-
-  toast(
-    'تم تغيير كلمة المرور بنجاح.'
-  );
-}
-
-/* =========================================================
-   DELETE STORAGE
-========================================================= */
-
-async function deleteStorageFiles(app) {
-  const paths =
-    (app.app_files || [])
-      .map(file => file.storage_path)
-      .filter(Boolean);
-
-  /*
-    الأيقونات الحالية مخزنة داخل app-files/icons
-  */
-  if (app.icon_url) {
-    const marker =
-      '/app-files/';
-
-    const index =
-      app.icon_url.indexOf(marker);
-
-    if (index >= 0) {
-      paths.push(
-        app.icon_url.slice(
-          index + marker.length
-        )
-      );
-    }
-  }
-
-  if (paths.length) {
-    await supabase.storage
-      .from('app-files')
-      .remove(paths);
-  }
-}
-
-/* =========================================================
-   APP EDITOR
-========================================================= */
-
-function openAppEditor(id) {
-  const app =
-    apps.find(
-      item =>
-        String(item.id) ===
-        String(id)
-    );
-
-  const modal =
-    document.getElementById(
-      'appEditModal'
-    );
-
-  if (!app || !modal) return;
-
-  modal.dataset.appId =
-    app.id;
-
-  const values = {
-    name: app.name || '',
-    description: app.description || '',
-    version: app.version || '',
-    category: app.category || '',
-    iconText: app.icon_text || 'C',
-    downloadUrl: app.download_url || ''
-  };
-
-  for (
-    const [name, value]
-    of Object.entries(values)
-  ) {
-    const element =
-      modal.querySelector(
-        `[name="${name}"]`
-      );
-
-    if (element) {
-      element.value = value;
-    }
-  }
-
-  const preview =
-    modal.querySelector(
-      '[data-icon-preview]'
-    );
-
-  if (preview) {
-    preview.innerHTML =
-      app.icon_url
-        ? `
-          <img
-            src="${escapeHTML(app.icon_url)}"
-            alt=""
-          >
-        `
-        : `
-          <span>
-            ${escapeHTML(
-              app.icon_text || 'C'
-            )}
-          </span>
-        `;
-  }
-
-  modal.classList.add(
-    'open'
-  );
-}
-
-/* =========================================================
-   UPDATE APP
-========================================================= */
-
-async function updateApp(event) {
-  event.preventDefault();
-
-  if (!(await requireAdmin())) return;
-
-  const modal =
-    document.getElementById(
-      'appEditModal'
-    );
-
-  if (!modal) return;
-
-  const id =
-    modal.dataset.appId;
-
-  const app =
-    apps.find(
-      item =>
-        String(item.id) ===
-        String(id)
-    );
-
-  if (!app) return;
-
-  const formData =
-    new FormData(
-      event.target
-    );
-
-  const category =
-    String(
-      formData.get('category') || ''
-    );
-
-  const patch = {
-    name:
-      String(
-        formData.get('name') || ''
-      ).trim(),
-
-    description:
-      String(
-        formData.get('description') || ''
-      ).trim(),
-
-    version:
-      String(
-        formData.get('version') || ''
-      ).trim(),
-
-    category,
-
-    category_name:
-      categories[category] ||
-      category,
-
-    icon_text:
-      String(
-        formData.get('iconText') || ''
-      ).trim() || 'C',
-
-    download_url:
-      String(
-        formData.get('downloadUrl') || ''
-      ).trim() || null,
-
-    updated_at:
-      new Date().toISOString()
-  };
-
-  if (!patch.name) {
-    toast(
-      'اسم التطبيق مطلوب.',
-      'error'
-    );
-    return;
-  }
-
-  if (!patch.version) {
-    toast(
-      'الإصدار مطلوب.',
-      'error'
-    );
-    return;
-  }
-
-  try {
-    const icon =
-      event.target.querySelector(
-        '[name="iconFile"]'
-      )?.files?.[0];
-
-    if (icon) {
-      patch.icon_url =
-        await uploadIcon(
-          icon,
-          id
-        );
-    }
-
-    const {
-      error
-    } = await supabase
-      .from('apps')
-      .update(patch)
-      .eq('id', id);
-
-    if (error) {
-      throw error;
-    }
-
-    for (
-      const [platform, field]
-      of [
-        ['windows', 'exeFile'],
-        ['android', 'apkFile']
-      ]
-    ) {
-      const file =
-        event.target.querySelector(
-          `[name="${field}"]`
-        )?.files?.[0];
-
-      if (file) {
-        await saveAppFile(
-          id,
-          platform,
-          file,
-          getFile(
-            app,
-            platform
-          )
-        );
-      }
-    }
-
-    const {
-      data: files
-    } = await supabase
-      .from('app_files')
-      .select('*')
-      .eq('app_id', id);
-
-    const totalSize =
-      (files || []).reduce(
-        (total, file) =>
-          total +
-          Number(
-            file.size_bytes || 0
-          ),
-        0
-      );
-
-    let platform =
-      'Windows';
-
-    if (
-      (files || []).length === 2
-    ) {
-      platform =
-        'Windows + Android';
-    } else if (
-      files?.[0]?.platform ===
-      'android'
-    ) {
-      platform =
-        'Android';
-    }
-
-    await supabase
-      .from('apps')
-      .update({
-        total_size_bytes:
-          totalSize,
-        platform
-      })
-      .eq('id', id);
-
-    modal.classList.remove(
-      'open'
-    );
-
-    event.target.reset();
-
-    await renderDashboard();
-
-    toast(
-      'تم حفظ تحديث التطبيق والملفات.'
-    );
-
-  } catch (error) {
-    console.error(
-      'UPDATE APP ERROR:',
-      error
-    );
-
-    toast(
-      error.message ||
-      'فشل تحديث التطبيق.',
-      'error'
-    );
-  }
-}
-
-/* =========================================================
-   DASHBOARD SETUP
-========================================================= */
-
-async function setupDashboard() {
-  const addAppForm =
-    document.getElementById(
-      'addAppForm'
-    );
-
-  if (!addAppForm) return;
-
-  if (!(await requireAdmin())) {
-    return;
-  }
-
-  addAppForm.onsubmit =
-    event => {
-      event.preventDefault();
-
-      createAppRecord(
-        event.target
-      );
-    };
-
-  document
-    .getElementById(
-      'addAdminForm'
-    )
-    ?.addEventListener(
-      'submit',
-      addAdmin
-    );
-
+function setupModalCloseButtons() {
   document
     .querySelectorAll(
-      '[data-close-modal]'
+      '[data-modal-close], .modal-close'
     )
-    .forEach(button => {
-      button.onclick = () => {
-        document
-          .getElementById(
-            'appEditModal'
-          )
-          ?.classList.remove(
-            'open'
-          );
-      };
+    .forEach((button) => {
+      button.addEventListener('click', () => {
+        const modal =
+          button.closest('.modal') ||
+          button.closest('[role="dialog"]');
+
+        hideElement(modal);
+      });
     });
 
   document
-    .getElementById(
-      'appEditForm'
-    )
-    ?.addEventListener(
-      'submit',
-      updateApp
-    );
-
-  await renderDashboard();
-}
-
-/* =========================================================
-   DASHBOARD EVENTS
-========================================================= */
-
-function setupDashboardDelegation() {
-  document.addEventListener(
-    'click',
-    async event => {
-
-      /* EDIT APP */
-      const edit =
-        event.target.closest(
-          '[data-edit-app]'
-        );
-
-      if (edit) {
-        openAppEditor(
-          edit.dataset.editApp
-        );
-        return;
-      }
-
-      /* DELETE APP */
-      const deleteButton =
-        event.target.closest(
-          '[data-delete-app]'
-        );
-
-      if (deleteButton) {
-        if (!(await requireAdmin())) {
-          return;
-        }
-
-        const app =
-          apps.find(
-            item =>
-              String(item.id) ===
-              String(
-                deleteButton.dataset.deleteApp
-              )
-          );
-
-        if (!app) return;
+    .querySelectorAll('.modal')
+    .forEach((modal) => {
+      modal.addEventListener('click', (event) => {
+        if (event.target !== modal) return;
 
         if (
-          !confirm(
-            `حذف "${app.name}" وملفاته؟`
-          )
+          modal.dataset.closeOnBackdrop !== 'false'
         ) {
+          hideElement(modal);
+        }
+      });
+    });
+}
+
+/* =========================================================
+   LOGOUT
+   ========================================================= */
+
+function setupLogout() {
+  document
+    .querySelectorAll(
+      '[data-logout], #logoutButton'
+    )
+    .forEach((button) => {
+      button.addEventListener('click', async (event) => {
+        event.preventDefault();
+
+        const { error } =
+          await supabase.auth.signOut();
+
+        if (error) {
+          console.error('Logout error:', error);
+
+          toast(
+            'تعذر تسجيل الخروج.',
+            'error'
+          );
+
           return;
         }
 
-        try {
-          await deleteStorageFiles(
-            app
-          );
+        location.href = 'index.html';
+      });
+    });
+}
 
-          const {
-            error
-          } = await supabase
-            .from('apps')
-            .delete()
-            .eq(
-              'id',
-              app.id
-            );
+/* =========================================================
+   AUTH STATE
+   ========================================================= */
 
-          if (error) {
-            throw error;
-          }
+async function initializeAuth() {
+  const {
+    data: {
+      session
+    }
+  } = await supabase.auth.getSession();
 
-          await renderDashboard();
+  currentUser = session?.user || null;
 
-          toast(
-            'تم حذف التطبيق.'
-          );
+  if (currentUser) {
+    await ensureProfile();
+  }
 
-        } catch (error) {
-          console.error(
-            'DELETE APP ERROR:',
-            error
-          );
+  renderUserUI();
 
-          toast(
-            error.message ||
-            'فشل حذف التطبيق.',
-            'error'
-          );
-        }
+  supabase.auth.onAuthStateChange(
+    async (_event, sessionData) => {
+      currentUser =
+        sessionData?.user || null;
 
-        return;
+      if (currentUser) {
+        await ensureProfile();
+      } else {
+        currentProfile = null;
       }
 
-      /* DELETE USER */
-      const deleteUserButton =
-        event.target.closest(
-          '[data-delete-user]'
-        );
-
-      if (deleteUserButton) {
-        await deleteUser(
-          deleteUserButton.dataset.deleteUser
-        );
-        return;
-      }
-
-      /* RESET PASSWORD */
-      const resetButton =
-        event.target.closest(
-          '[data-reset-user]'
-        );
-
-      if (resetButton) {
-        await resetUserPassword(
-          resetButton.dataset.resetUser
-        );
-      }
+      renderUserUI();
     }
   );
 }
 
 /* =========================================================
-   UPLOAD PREVIEWS
-========================================================= */
+   LOGIN PAGE REDIRECT
+   ========================================================= */
 
-function setupUploadPreviews() {
-  const exe =
-    document.getElementById(
-      'newAppExe'
+function redirectAuthenticatedUserFromLogin() {
+  const isLoginPage =
+    location.pathname.endsWith('login.html') ||
+    document.querySelector(
+      '#loginForm, [data-login-form]'
     );
 
-  const apk =
-    document.getElementById(
-      'newAppApk'
-    );
+  if (!isLoginPage || !currentUser) return;
 
-  const size =
-    document.getElementById(
-      'newAppSize'
-    );
+  const params =
+    new URLSearchParams(location.search);
 
-  const platform =
-    document.getElementById(
-      'newAppPlatform'
-    );
+  if (params.get('redirect')) {
+    location.href = params.get('redirect');
+    return;
+  }
 
-  const update =
-    () => {
-      const files = [
-        exe?.files?.[0],
-        apk?.files?.[0]
-      ].filter(Boolean);
-
-      const totalSize =
-        files.reduce(
-          (total, file) =>
-            total + file.size,
-          0
-        );
-
-      if (size) {
-        setText(
-          'newAppSize',
-          formatFileSize(
-            totalSize
-          )
-        );
-      }
-
-      if (platform) {
-        if (files.length === 2) {
-          setText(
-            'newAppPlatform',
-            'Windows + Android'
-          );
-        } else if (
-          files[0]?.name
-            ?.toLowerCase()
-            .endsWith('.apk')
-        ) {
-          setText(
-            'newAppPlatform',
-            'Android'
-          );
-        } else if (files.length) {
-          setText(
-            'newAppPlatform',
-            'Windows'
-          );
-        } else {
-          setText(
-            'newAppPlatform',
-            'سيتم تحديده تلقائيًا'
-          );
-        }
-      }
-    };
-
-  exe?.addEventListener(
-    'change',
-    update
-  );
-
-  apk?.addEventListener(
-    'change',
-    update
-  );
-
-  document
-    .getElementById(
-      'newAppIconFile'
-    )
-    ?.addEventListener(
-      'change',
-      event => {
-        const label =
-          document.querySelector(
-            '[data-file-label="icon"]'
-          );
-
-        if (label) {
-          label.textContent =
-            event.target.files?.[0]
-              ?.name ||
-            'PNG / JPG / WEBP';
-        }
-      }
-    );
+  location.href = 'index.html';
 }
 
 /* =========================================================
-   GLOBAL INIT
-========================================================= */
+   APP COUNTERS
+   ========================================================= */
 
-(async () => {
+async function setupCounters() {
+  const counters =
+    document.querySelectorAll(
+      '[data-app-count]'
+    );
+
+  if (!counters.length) return;
+
+  const apps = await loadApps({
+    publishedOnly: true
+  });
+
+  counters.forEach((counter) => {
+    counter.textContent =
+      apps.length.toLocaleString();
+  });
+}
+
+/* =========================================================
+   INITIALIZATION
+   ========================================================= */
+
+async function initialize() {
   try {
+    await initializeAuth();
 
-    const configured =
-      await requireConfig();
+    setupNavigation();
+    setupGlobalSearch();
+    setupLogout();
+    setupModalCloseButtons();
+    setupCategoryOptions();
 
-    if (!configured) {
-      setupAuth();
-      setupNavbar();
-      showLoading();
-      return;
-    }
+    await setupSearchFromUrl();
 
-    /*
-      1. تحميل Session أولًا
-    */
-    await loadSession();
-
-    /*
-      2. الاستماع لأي Login / Logout
-    */
-    setupAuthStateListener();
-
-    /*
-      3. Navbar
-    */
-    setupNavbar();
-
-    /*
-      4. Login / Register
-    */
     await setupAuth();
 
-    /*
-      5. Account
-    */
-    await setupAccount();
+    await setupStorePage();
 
-    /*
-      6. Dashboard
-    */
-    await setupDashboard();
+    await setupAppDetailsPage();
 
-    /*
-      7. Dashboard delegation
-    */
-    setupDashboardDelegation();
+    await setupAccountPage();
 
-    /*
-      8. Upload previews
-    */
-    setupUploadPreviews();
+    await setupAdminPage();
 
-    /*
-      9. Apps
-    */
-    await loadApps();
+    await setupCounters();
 
-    displayApps(apps);
-
-    displayReleases();
-
-    /*
-      10. App details
-    */
-    await loadAppDetails();
-
-    /*
-      11. Search
-    */
-    document
-      .getElementById(
-        'searchInput'
-      )
-      ?.addEventListener(
-        'input',
-        filterHomeApps
-      );
-
-    document
-      .getElementById(
-        'searchBtn'
-      )
-      ?.addEventListener(
-        'click',
-        filterHomeApps
-      );
-
-    /*
-      12. Categories
-    */
-    document
-      .querySelectorAll(
-        '.category'
-      )
-      .forEach(button => {
-        button.addEventListener(
-          'click',
-          () => {
-
-            document
-              .querySelectorAll(
-                '.category'
-              )
-              .forEach(item =>
-                item.classList.remove(
-                  'active'
-                )
-              );
-
-            button.classList.add(
-              'active'
-            );
-
-            filterHomeApps();
-          }
-        );
-      });
-
-    showLoading();
-
+    redirectAuthenticatedUserFromLogin();
   } catch (error) {
-
     console.error(
-      'CODEX INITIALIZATION ERROR:',
+      'CODEX initialization error:',
       error
     );
-
-    toast(
-      'حدث خطأ أثناء تشغيل CODEX Store.',
-      'error'
-    );
-
-    showLoading();
   }
-})();
-```
+}
+
+if (
+  document.readyState === 'loading'
+) {
+  document.addEventListener(
+    'DOMContentLoaded',
+    initialize
+  );
+} else {
+  initialize();
+}
+
+/* =========================================================
+   GLOBAL EXPORTS
+   ========================================================= */
+
+window.CODEX = {
+  supabase,
+  loadApps,
+  loadAppById,
+  loadProfile,
+  isAdmin,
+  toast,
+  openAppEditor,
+  closeAppEditor,
+  saveAppEditor,
+  deleteApp
+};
