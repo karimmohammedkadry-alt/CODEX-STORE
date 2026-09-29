@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <meta
+        name="description"
+        content="تفاصيل التطبيق - CODEX App Store"
+    >
+
+    <title>تفاصيل التطبيق | CODEX App Store</title>
+
+    <link
+        rel="stylesheet"
+        href="style.css"
+    >
+
+    <link
+        rel="preconnect"
+        href="https://fonts.googleapis.com"
+    >
+
+    <link
+        rel="preconnect"
+        href="https://fonts.gstatic.com"
+        crossorigin
+    >
+
+    <link
+        href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet"
+    >
+
+</head>
+
+
+<body>
+
+    <!-- =========================
+         Navbar
+    ========================== -->
+
+    <header class="navbar">
+
+        <a
+            href="index.html"
+            class="logo"
+        >
+
+            <div class="logo-image-wrapper">
+
+                <img
+                    src="assets/codex-logo.png"
+                    alt="CODEX Logo"
+                    class="logo-image"
+                    onerror="this.style.display='none'; this.nextElementSibling.style.display='grid';"
+                >
+
+                <span class="logo-fallback">
+                    C
+                </span>
+
+            </div>
+
+            <span class="logo-text">
+                CODEX
+            </span>
+
+        </a>
+
+
+        <nav class="nav-links">
+
+            <a href="index.html">
+                الرئيسية
+            </a>
+
+            <a
+                href="index.html#apps"
+                class="active"
+            >
+                التطبيقات
+            </a>
+
+            <a href="index.html#categories">
+                التصنيفات
+            </a>
+
+            <a href="index.html#updates">
+                آخر الإصدارات
+            </a>
+
+        </nav>
+
+
+        <div class="nav-actions">
+
+            <button
+                class="login-btn"
+                id="loginBtn"
+                type="button"
+            >
+                تسجيل الدخول
+            </button>
+
+        </div>
+
+    </header>
+
+
+    <main>
+
+        <!-- =========================
+             Back
+        ========================== -->
+
+        <section class="app-details-section">
+
+            <a
+                href="index.html#apps"
+                class="back-button"
+            >
+                ← العودة إلى التطبيقات
+            </a>
+
+
+            <!-- =========================
+                 App Hero
+            ========================== -->
+
+            <div class="app-details-card">
+
+                <div class="app-details-main">
+
+                    <div
+                        class="details-icon"
+                        id="detailsIcon"
+                    >
+                        C
+                    </div>
+
+
+                    <div class="details-content">
+
+                        <span
+                            class="details-category"
+                            id="detailsCategory"
+                        >
+                            الأعمال
+                        </span>
+
+
+                        <h1 id="detailsName">
+                            CODEX
+                        </h1>
+
+
+                        <p
+                            id="detailsDescription"
+                            class="details-description"
+                        >
+                            برنامج إدارة الأنظمة والمهام.
+                        </p>
+
+
+                        <div class="details-rating">
+
+                            <span>
+                                ★
+                            </span>
+
+                            <strong id="detailsRating">
+                                4.8
+                            </strong>
+
+                            <span>
+                                تقييم المستخدمين
+                            </span>
+
+                        </div>
+
+
+                        <div class="details-actions">
+
+                            <button
+                                class="download-btn"
+                                id="downloadBtn"
+                                type="button"
+                            >
+                                تحميل التطبيق
+                            </button>
+
+                            <div id="downloadOptions" class="download-options"></div>
+
+
+                            <button
+                                class="secondary-btn"
+                                id="favoriteBtn"
+                                type="button"
+                            >
+                                ♡ حفظ
+                            </button>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <!-- =========================
+                     App Information
+                ========================== -->
+
+                <div class="app-info-grid">
+
+                    <div class="info-box">
+
+                        <span>
+                            الإصدار
+                        </span>
+
+                        <strong id="detailsVersion">
+                            2.1.0
+                        </strong>
+
+                    </div>
+
+
+                    <div class="info-box">
+
+                        <span>
+                            الحجم
+                        </span>
+
+                        <strong id="detailsSize">
+                            125 MB
+                        </strong>
+
+                    </div>
+
+
+                    <div class="info-box">
+
+                        <span>
+                            النظام
+                        </span>
+
+                        <strong id="detailsPlatform">
+                            Windows
+                        </strong>
+
+                    </div>
+
+
+                    <div class="info-box">
+
+                        <span>
+                            التصنيف
+                        </span>
+
+                        <strong id="detailsCategoryInfo">
+                            الأعمال
+                        </strong>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <!-- =========================
+                 Features
+            ========================== -->
+
+            <section class="details-section">
+
+                <div class="details-section-title">
+
+                    <span>
+                        حول التطبيق
+                    </span>
+
+                    <h2>
+                        مميزات التطبيق
+                    </h2>
+
+                </div>
+
+
+                <div class="features-grid">
+
+                    <div class="feature-card">
+
+                        <span class="feature-icon">
+                            ⚡
+                        </span>
+
+                        <h3>
+                            سريع
+                        </h3>
+
+                        <p>
+                            أداء سريع وتجربة استخدام بسيطة.
+                        </p>
+
+                    </div>
+
+
+                    <div class="feature-card">
+
+                        <span class="feature-icon">
+                            🔒
+                        </span>
+
+                        <h3>
+                            آمن
+                        </h3>
+
+                        <p>
+                            تصميم يركز على حماية بيانات المستخدم.
+                        </p>
+
+                    </div>
+
+
+                    <div class="feature-card">
+
+                        <span class="feature-icon">
+                            🖥
+                        </span>
+
+                        <h3>
+                            Windows
+                        </h3>
+
+                        <p>
+                            مصمم للعمل على أجهزة Windows.
+                        </p>
+
+                    </div>
+
+
+                    <div class="feature-card">
+
+                        <span class="feature-icon">
+                            🔄
+                        </span>
+
+                        <h3>
+                            تحديثات
+                        </h3>
+
+                        <p>
+                            إمكانية الحصول على أحدث الإصدارات.
+                        </p>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+
+            <!-- =========================
+                 Description
+            ========================== -->
+
+            <section class="details-section">
+
+                <div class="details-section-title">
+
+                    <span>
+                        التفاصيل
+                    </span>
+
+                    <h2>
+                        عن التطبيق
+                    </h2>
+
+                </div>
+
+
+                <div class="long-description">
+
+                    <p id="longDescription">
+                        هذا التطبيق جزء من مجموعة تطبيقات CODEX.
+                        تم تصميمه لتقديم تجربة استخدام بسيطة
+                        وسريعة مع واجهة حديثة.
+                    </p>
+
+                </div>
+
+            </section>
+
+
+            <!-- =========================
+                 Similar Apps
+            ========================== -->
+
+            <section class="details-section">
+
+                <div class="details-section-title">
+
+                    <span>
+                        قد يعجبك أيضًا
+                    </span>
+
+                    <h2>
+                        تطبيقات مشابهة
+                    </h2>
+
+                </div>
+
+
+                <div
+                    class="similar-apps"
+                    id="similarApps"
+                >
+                </div>
+
+            </section>
+
+        </section>
+
+    </main>
+
+
+    <!-- =========================
+         Footer
+    ========================== -->
+
+    <footer class="footer">
+
+        <div class="footer-brand">
+
+            <div class="footer-logo-wrapper">
+
+                <img
+                    src="assets/codex-logo.png"
+                    alt="CODEX"
+                    class="footer-logo"
+                    onerror="this.style.display='none'; this.nextElementSibling.style.display='grid';"
+                >
+
+                <span class="footer-logo-fallback">
+                    C
+                </span>
+
+            </div>
+
+            <strong>
+                CODEX
+            </strong>
+
+            <span>
+                App Store
+            </span>
+
+        </div>
+
+
+        <p>
+            © 2026 CODEX App Store — جميع الحقوق محفوظة.
+        </p>
+
+
+        <div class="footer-links">
+
+            <a href="#">
+                عن المتجر
+            </a>
+
+            <a href="#">
+                سياسة الخصوصية
+            </a>
+
+            <a href="#">
+                تواصل معنا
+            </a>
+
+        </div>
+
+    </footer>
+
+
+    <script type="module" src="/script.js"></script>
+
+</body>
+
+</html>
