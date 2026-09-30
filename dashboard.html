@@ -25,12 +25,12 @@
 <div class="form-field"><label>الوصف</label><input id="newAppDescription" required placeholder="وصف التطبيق"></div>
 <div class="form-field"><label>التصنيف</label><select id="newAppCategory"><option value="business">الأعمال</option><option value="education">التعليم</option><option value="health">الصحة</option><option value="productivity">الإنتاجية</option><option value="games">الألعاب</option><option value="tools">الأدوات</option></select></div>
 <div class="form-field"><label>الإصدار</label><input id="newAppVersion" required placeholder="1.0.0"></div>
-<div class="form-field"><label>ملف Windows — EXE</label><label class="file-picker"><input id="newAppExe" type="file" accept=".exe,application/vnd.microsoft.portable-executable"><span>اختيار ملف EXE</span><strong data-file-label="exe">لم يتم اختيار ملف</strong></label></div>
-<div class="form-field"><label>ملف Android — APK</label><label class="file-picker"><input id="newAppApk" type="file" accept=".apk,application/vnd.android.package-archive"><span>اختيار ملف APK</span><strong data-file-label="apk">لم يتم اختيار ملف</strong></label></div>
-<div class="form-field"><label>أيقونة التطبيق</label><label class="file-picker image-picker"><input id="newAppIconFile" type="file" accept="image/*"><span>اختيار صورة من الجهاز</span><strong data-file-label="icon">PNG / JPG / WEBP</strong></label></div>
+<div class="form-field"><label>ملف Windows — EXE</label><label class="file-picker"><input id="newAppExe" type="file" accept=".exe"><span>اختيار ملف EXE</span><strong data-file-label="exe">لم يتم اختيار ملف</strong></label></div>
+<div class="form-field"><label>ملف Android — APK</label><label class="file-picker"><input id="newAppApk" type="file" accept=".apk"><span>اختيار ملف APK</span><strong data-file-label="apk">لم يتم اختيار ملف</strong></label></div>
+<div class="form-field"><label>أيقونة التطبيق</label><label class="file-picker image-picker"><input id="newAppIconFile" type="file" accept=".png,.jpg,.jpeg,.webp"><span>اختيار صورة من الجهاز</span><strong data-file-label="icon">PNG / JPG / WEBP</strong></label></div>
 <div class="form-field"><label>اسم الأيقونة النصي — اختياري</label><input id="newAppIcon" maxlength="2" placeholder="C"></div>
 <div class="form-field wide"><div class="upload-summary"><div><span>الحجم الإجمالي</span><strong id="newAppSize">سيتم حسابه تلقائيًا</strong></div><div><span>النظام</span><strong id="newAppPlatform">سيتم تحديده تلقائيًا</strong></div></div></div>
-<div class="form-field wide"><small class="form-help">ارفع EXE أو APK أو الاثنين معًا. الحجم والنظام يتم حسابهما تلقائيًا، ولا تحتاج لإدخال رابط تحميل.</small></div>
+<div class="form-field wide"><small class="form-help">ارفع EXE أو APK أو الاثنين معًا. صورة الأيقونة اختيارية. الحجم والنظام يتم حسابهما تلقائيًا، ولا تحتاج لإدخال رابط تحميل.</small></div>
 <button type="submit" class="add-app-btn">+ رفع التطبيق وإضافته</button>
 </form>
 </section>
@@ -44,9 +44,9 @@
 <div id="appEditModal" class="codex-modal"><div class="modal-card"><div class="modal-header"><div><span>APPLICATION EDITOR</span><h2>تعديل التطبيق</h2></div><button data-close-modal type="button">×</button></div>
 <form id="appEditForm" class="add-app-form"><input type="hidden" name="id">
 <div class="form-field"><label>الاسم</label><input name="name" required></div><div class="form-field"><label>الوصف</label><input name="description" required></div><div class="form-field"><label>الإصدار</label><input name="version" required></div><div class="form-field"><label>التصنيف</label><select name="category"><option value="business">الأعمال</option><option value="education">التعليم</option><option value="health">الصحة</option><option value="productivity">الإنتاجية</option><option value="games">الألعاب</option><option value="tools">الأدوات</option></select></div>
-<div class="form-field"><label>تحديث EXE — اختياري</label><label class="file-picker"><input name="exeFile" type="file" accept=".exe,application/vnd.microsoft.portable-executable"><span>اختيار EXE جديد</span><strong data-file-status="windows">لم يتم اختيار ملف جديد</strong></label></div>
-<div class="form-field"><label>تحديث APK — اختياري</label><label class="file-picker"><input name="apkFile" type="file" accept=".apk,application/vnd.android.package-archive"><span>اختيار APK جديد</span><strong data-file-status="android">لم يتم اختيار ملف جديد</strong></label></div>
-<div class="form-field"><label>تغيير الأيقونة — اختياري</label><label class="file-picker image-picker"><input name="iconFile" type="file" accept="image/*"><span>اختيار صورة جديدة</span><strong>PNG / JPG / WEBP</strong></label></div>
+<div class="form-field"><label>تحديث EXE — اختياري</label><label class="file-picker"><input name="exeFile" type="file" accept=".exe"><span>اختيار EXE جديد</span><strong data-file-status="windows">لم يتم اختيار ملف جديد</strong></label></div>
+<div class="form-field"><label>تحديث APK — اختياري</label><label class="file-picker"><input name="apkFile" type="file" accept=".apk"><span>اختيار APK جديد</span><strong data-file-status="android">لم يتم اختيار ملف جديد</strong></label></div>
+<div class="form-field"><label>تغيير الأيقونة — اختياري</label><label class="file-picker image-picker"><input name="iconFile" type="file" accept=".png,.jpg,.jpeg,.webp"><span>اختيار صورة جديدة</span><strong>PNG / JPG / WEBP</strong></label></div>
 <div class="form-field"><label>معاينة الأيقونة</label><div class="icon-preview" data-icon-preview><span>C</span></div></div>
 <div class="form-field"><label>الأيقونة النصية — احتياطي</label><input name="iconText" maxlength="2"></div>
 <div class="form-field wide"><div class="edit-file-note">الحجم والنظام يتم تحديثهما تلقائيًا حسب الملفات الموجودة والجديدة.</div></div>
