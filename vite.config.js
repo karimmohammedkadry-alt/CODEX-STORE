@@ -1,15 +1,21 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const rootDir = fileURLToPath(new URL('.', import.meta.url));
 
 export default defineConfig({
+  root: rootDir,
   build: {
+    outDir: resolve(rootDir, 'dist'),
+    emptyOutDir: true,
     rollupOptions: {
       input: {
-        index: resolve(__dirname, 'index.html'),
-        login: resolve(__dirname, 'login.html'),
-        account: resolve(__dirname, 'account.html'),
-        app: resolve(__dirname, 'app.html'),
-        dashboard: resolve(__dirname, 'dashboard.html'),
+        index: resolve(rootDir, 'index.html'),
+        login: resolve(rootDir, 'login.html'),
+        account: resolve(rootDir, 'account.html'),
+        app: resolve(rootDir, 'app.html'),
+        dashboard: resolve(rootDir, 'dashboard.html'),
       },
     },
   },
