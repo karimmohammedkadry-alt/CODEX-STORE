@@ -12,6 +12,7 @@ create table if not exists public.profiles (
 create table if not exists public.apps (
   id uuid primary key default gen_random_uuid(),
   name text not null,
+  slug text not null,
   description text not null default '',
   category text not null default 'tools',
   category_name text not null default 'الأدوات',
