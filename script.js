@@ -29,7 +29,12 @@ async function loadApps(){const {data,error}=await supabase.from('apps').select(
 
 function setupNavbar(){
   const loginBtn=document.getElementById('loginBtn');
-  if(loginBtn){loginBtn.textContent=currentUser?(currentProfile?.name||'حسابي'):'تسجيل الدخول';loginBtn.href=currentUser?'account.html':'login.html';}
+  if(loginBtn){
+    // Keep login navigation native so it works even if Supabase/session initialization fails.
+    loginBtn.href=currentUser?'account.html':'login.html';
+    loginBtn.textContent=currentUser?(currentProfile?.name||'حسابي'):'تسجيل الدخول';
+    loginBtn.onclick=null;
+  }
   document.querySelectorAll('[data-logout]').forEach(b=>b.onclick=logout);
   if(currentUser && currentProfile?.role==='admin') document.querySelectorAll('.nav-actions').forEach(n=>{if(!n.querySelector('[data-dashboard-link]'))n.insertAdjacentHTML('afterbegin','<a class="secondary-btn" data-dashboard-link href="dashboard.html">لوحة التحكم</a>');});
 }
@@ -66,4 +71,33 @@ async function setupDashboard(){if(!document.getElementById('addAppForm'))return
 function setupDashboardDelegation(){document.addEventListener('click',async e=>{const edit=e.target.closest('[data-edit-app]');if(edit)return openAppEditor(edit.dataset.editApp);const del=e.target.closest('[data-delete-app]');if(del){const app=apps.find(a=>a.id===del.dataset.deleteApp);if(!app||!confirm(`حذف "${app.name}" وملفاته؟`))return;await deleteStorageFiles(app);const {error}=await supabase.from('apps').delete().eq('id',app.id);if(error)return toast(error.message,'error');await renderDashboard();toast('تم حذف التطبيق.');}const du=e.target.closest('[data-delete-user]');if(du)await deleteUser(du.dataset.deleteUser);const rp=e.target.closest('[data-reset-user]');if(rp)await resetUserPassword(rp.dataset.resetUser);});}
 function setupUploadPreviews(){const exe=document.getElementById('newAppExe'),apk=document.getElementById('newAppApk'),size=document.getElementById('newAppSize'),platform=document.getElementById('newAppPlatform');const update=()=>{const files=[exe?.files?.[0],apk?.files?.[0]].filter(Boolean);if(size)setText('newAppSize',formatFileSize(files.reduce((n,f)=>n+f.size,0)));if(platform)setText('newAppPlatform',files.length===2?'Windows + Android':files[0]?.name.toLowerCase().endsWith('.apk')?'Android':'Windows');};exe?.addEventListener('change',update);apk?.addEventListener('change',update);document.getElementById('newAppIconFile')?.addEventListener('change',e=>{const l=document.querySelector('[data-file-label="icon"]');if(l)l.textContent=e.target.files?.[0]?.name||'PNG / JPG / WEBP';});}
 
-(async()=>{await requireConfig();await loadSession();setupNavbar();await setupAuth();await setupAccount();await setupDashboard();setupDashboardDelegation();setupUploadPreviews();await loadApps();displayApps(apps);displayReleases();await loadAppDetails();document.getElementById('searchInput')?.addEventListener('input',filterHomeApps);document.getElementById('searchBtn')?.addEventListener('click',filterHomeApps);document.querySelectorAll('.category').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.category').forEach(x=>x.classList.remove('active'));b.classList.add('active');filterHomeApps();}));showLoading();})();
+(async()=>{
+  // Bind navigation and page-local auth handlers first. Navigation must not depend on async Supabase calls.
+  setupNavbar();
+  await setupAuth();
+  setupAccount();
+  setupUploadPreviews();
+
+  const configReady=await requireConfig();
+  if(configReady){
+    try{
+      await loadSession();
+      setupNavbar();
+      if(document.getElementById('addAppForm')) await setupDashboard();
+      setupDashboardDelegation();
+      if(document.getElementById('appsGrid') || document.getElementById('releasesList') || document.getElementById('detailsName')){
+        await loadApps();
+        displayApps(apps);
+        displayReleases();
+        await loadAppDetails();
+      }
+    }catch(err){
+      console.error('CODEX initialization error:',err);
+    }
+  }
+
+  document.getElementById('searchInput')?.addEventListener('input',filterHomeApps);
+  document.getElementById('searchBtn')?.addEventListener('click',filterHomeApps);
+  document.querySelectorAll('.category').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.category').forEach(x=>x.classList.remove('active'));b.classList.add('active');filterHomeApps();}));
+  showLoading();
+})();
