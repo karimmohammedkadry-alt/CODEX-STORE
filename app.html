@@ -102,13 +102,13 @@
 
         <div class="nav-actions">
 
-            <button
+            <a
                 class="login-btn"
                 id="loginBtn"
-                type="button"
+                href="login.html"
             >
                 تسجيل الدخول
-            </button>
+            </a>
 
         </div>
 
@@ -208,6 +208,14 @@
                                 ♡ حفظ
                             </button>
 
+                            <button
+                                class="secondary-btn"
+                                id="shareBtn"
+                                type="button"
+                            >
+                                مشاركة
+                            </button>
+
                         </div>
 
                     </div>
@@ -261,15 +269,18 @@
 
 
                     <div class="info-box">
+                        <span>التصنيف</span>
+                        <strong id="detailsCategoryInfo">الأعمال</strong>
+                    </div>
 
-                        <span>
-                            التصنيف
-                        </span>
+                    <div class="info-box">
+                        <span>التحميلات</span>
+                        <strong id="detailsDownloads">0</strong>
+                    </div>
 
-                        <strong id="detailsCategoryInfo">
-                            الأعمال
-                        </strong>
-
+                    <div class="info-box">
+                        <span>آخر تحديث</span>
+                        <strong id="detailsUpdated">—</strong>
                     </div>
 
                 </div>
@@ -296,76 +307,7 @@
                 </div>
 
 
-                <div class="features-grid">
-
-                    <div class="feature-card">
-
-                        <span class="feature-icon">
-                            ⚡
-                        </span>
-
-                        <h3>
-                            سريع
-                        </h3>
-
-                        <p>
-                            أداء سريع وتجربة استخدام بسيطة.
-                        </p>
-
-                    </div>
-
-
-                    <div class="feature-card">
-
-                        <span class="feature-icon">
-                            🔒
-                        </span>
-
-                        <h3>
-                            آمن
-                        </h3>
-
-                        <p>
-                            تصميم يركز على حماية بيانات المستخدم.
-                        </p>
-
-                    </div>
-
-
-                    <div class="feature-card">
-
-                        <span class="feature-icon">
-                            🖥
-                        </span>
-
-                        <h3>
-                            Windows
-                        </h3>
-
-                        <p>
-                            مصمم للعمل على أجهزة Windows.
-                        </p>
-
-                    </div>
-
-
-                    <div class="feature-card">
-
-                        <span class="feature-icon">
-                            🔄
-                        </span>
-
-                        <h3>
-                            تحديثات
-                        </h3>
-
-                        <p>
-                            إمكانية الحصول على أحدث الإصدارات.
-                        </p>
-
-                    </div>
-
-                </div>
+                <div class="features-grid" id="detailsFeatures"></div>
 
             </section>
 
@@ -391,11 +333,8 @@
 
                 <div class="long-description">
 
-                    <p id="longDescription">
-                        هذا التطبيق جزء من مجموعة تطبيقات CODEX.
-                        تم تصميمه لتقديم تجربة استخدام بسيطة
-                        وسريعة مع واجهة حديثة.
-                    </p>
+                    <p id="longDescription">سيتم تحميل تفاصيل التطبيق…</p>
+                    <div class="changelog-box" id="detailsChangelog" hidden></div>
 
                 </div>
 
@@ -474,19 +413,10 @@
 
 
         <div class="footer-links">
-
-            <a href="#">
-                عن المتجر
-            </a>
-
-            <a href="#">
-                سياسة الخصوصية
-            </a>
-
-            <a href="#">
-                تواصل معنا
-            </a>
-
+            <a href="index.html">الرئيسية</a>
+            <a href="index.html#apps">التطبيقات</a>
+            <a href="index.html#categories">التصنيفات</a>
+            <a href="index.html#updates">آخر الإصدارات</a>
         </div>
 
     </footer>

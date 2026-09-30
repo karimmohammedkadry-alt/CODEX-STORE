@@ -109,15 +109,26 @@
                     <button data-toggle-password="loginPassword" type="button">👁</button>
                 </div>
 
-                <button
-                    type="submit"
-                    class="auth-submit"
-                >
-                    تسجيل الدخول
-                </button>
+                <button type="submit" class="auth-submit">تسجيل الدخول</button>
+                <button type="button" class="auth-link-button" id="forgotPasswordBtn">نسيت كلمة المرور؟</button>
 
             </form>
 
+
+
+            <form id="passwordResetForm" class="auth-form hidden">
+                <label>كلمة المرور الجديدة</label>
+                <div class="password-field auth-password-field">
+                    <input id="resetPassword" type="password" minlength="6" placeholder="••••••••" required>
+                    <button data-toggle-password="resetPassword" type="button">👁</button>
+                </div>
+                <label>تأكيد كلمة المرور</label>
+                <div class="password-field auth-password-field">
+                    <input id="resetConfirm" type="password" minlength="6" placeholder="••••••••" required>
+                    <button data-toggle-password="resetConfirm" type="button">👁</button>
+                </div>
+                <button type="submit" class="auth-submit">حفظ كلمة المرور الجديدة</button>
+            </form>
 
             <!-- =========================
                  Register Form

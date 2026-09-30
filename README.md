@@ -1,48 +1,66 @@
 # CODEX App Store 3.0 — Supabase + Vercel + GitHub
 
-تم تحويل المشروع من `localStorage + IndexedDB` إلى بنية حقيقية تعتمد على **Supabase Auth + PostgreSQL + Storage**، مع تجهيز المشروع للبناء والنشر على **Vercel** وربطه بسهولة مع **GitHub**.
+نسخة V11 المراجعة من CODEX App Store. المتجر يعمل بواجهة متعددة الصفحات مع Supabase Auth + PostgreSQL + Storage.
 
-## ما تم نقله إلى Supabase
-- تسجيل الدخول وإنشاء الحسابات: Supabase Auth.
-- المستخدمون والأدوار: `profiles`.
-- التطبيقات: `apps`.
-- ملفات التطبيقات: `app_files`.
-- ملفات EXE/APK والأيقونات: Supabase Storage bucket باسم `app-files`.
-- RLS لمنع المستخدم العادي من إنشاء/تعديل/حذف التطبيقات.
-- إدارة Admin من خلال Edge Functions آمنة؛ لا يوجد Service Role Key داخل Frontend.
-- تغيير كلمة مرور المستخدم من Supabase Auth.
-- تغيير كلمة مرور مستخدم بواسطة Admin بدون كشف كلمة المرور القديمة.
-- حذف المستخدم بواسطة Admin عبر Edge Function.
+## الوظائف الأساسية
 
-## إعداد Supabase
-1. أنشئ مشروعًا جديدًا في Supabase.
-2. افتح SQL Editor والصق محتوى `supabase/schema.sql` وشغّله بالكامل.
-3. أنشئ أول حساب من `login.html` باستخدام:
-   - Email: `karimmohammedkadry@gmail.com`
-   - Password: `555555`
-4. إذا كان Email Confirmation مفعّلًا، أكد البريد أولًا.
-5. بعد إنشاء الحساب، نفّذ آخر سطر في `supabase/schema.sql` بعد تعديل البريد عند الحاجة:
-   `update public.profiles set role='admin' where email='karimmohammedkadry@gmail.com';`
-6. من Supabase Authentication > URL Configuration أضف دومين Vercel بعد النشر، وأضف `http://localhost:5173` للتجربة المحلية.
+- تسجيل الدخول وإنشاء الحساب.
+- استعادة كلمة المرور من صفحة الدخول.
+- صفحة الحساب: الاسم، الإيميل، كلمة المرور، والمفضلة.
+- متجر التطبيقات مع البحث والتصنيفات وآخر التحديثات.
+- صفحة تفاصيل التطبيق مع EXE/APK، الحجم، النظام، عدد التحميلات، تاريخ التحديث، ملاحظات الإصدار، المشاركة والمفضلة.
+- لوحة تحكم Admin للتطبيقات والمستخدمين.
+- إضافة التطبيق من EXE أو APK أو الاثنين.
+- صورة التطبيق اختيارية بالكامل.
+- حساب الحجم والنظام تلقائيًا.
+- رفع كبير قابل للاستئناف باستخدام TUS للملفات الأكبر من 6MB.
+- تعديل الملفات واستبدالها أو إزالتها، وتغيير/إزالة الصورة.
+- حذف التطبيق مع تنظيف Storage.
+- إنشاء مستخدم عادي أو Admin من لوحة التحكم.
+- تغيير صلاحيات المستخدم وتغيير كلمة مروره وحذف المستخدم.
+- عداد تحميل لكل تطبيق.
+- RLS وStorage policies.
+- واجهة تحميل/تقدم/نجاح/خطأ وحركات انتقال خفيفة.
 
-### Edge Functions
+## Supabase
+
+1. افتح SQL Editor وشغّل `supabase/schema.sql` بالكامل على قاعدة البيانات الحالية.
+2. لا تنفذ أي `DROP TABLE` لإعادة إنشاء قاعدة البيانات؛ الملف migration آمن ويضيف الأعمدة الناقصة فقط.
+3. أنشئ أول حساب من `login.html` أو من Authentication > Users.
+4. اجعل الحساب الأول Admin من SQL بعد التأكد من البريد:
+
+```sql
+update public.profiles
+set role='admin'
+where email='YOUR_ADMIN_EMAIL';
+```
+
+5. تأكد أن Bucket اسمه `app-files` وحالته Public. ملف الـSQL يضبطه ويزيل قيود MIME/الحجم القديمة من مستوى الـbucket، مع إبقاء الرفع محميًا للأدمن عبر policies.
+6. في Authentication > URL Configuration أضف دومين الموقع في Vercel و`http://localhost:5173` للتجربة المحلية. هذا مطلوب أيضًا لرابط استعادة كلمة المرور.
+
+## Edge Functions
+
 المشروع يحتوي على:
+
 - `supabase/functions/create-admin`
+- `supabase/functions/admin-set-role`
 - `supabase/functions/admin-reset-password`
 - `supabase/functions/admin-delete-user`
 
-بعد تسجيل الدخول إلى Supabase CLI وربط المشروع، انشرها:
+انشرها باستخدام Supabase CLI بعد تسجيل الدخول وربط المشروع:
 
 ```bash
 supabase functions deploy create-admin
+supabase functions deploy admin-set-role
 supabase functions deploy admin-reset-password
 supabase functions deploy admin-delete-user
 ```
 
-**لا تضع** `SUPABASE_SERVICE_ROLE_KEY` في `.env` الخاص بالواجهة أو GitHub. الـService Role يستخدم داخل Edge Functions فقط.
+الـEdge Functions تتعامل مع مفاتيح Supabase السرية من بيئة الوظيفة. لا تضع Service Role/Secret Key في Frontend أو `.env.local`.
 
-## تشغيل محليًا
-انسخ `.env.example` إلى `.env.local` ثم ضع:
+## تشغيل محلي
+
+ضع متغيرات الواجهة في `.env.local`:
 
 ```env
 VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
@@ -62,37 +80,16 @@ npm run dev
 npm run build
 ```
 
-الناتج سيكون داخل `dist`.
+الناتج داخل `dist`.
 
 ## Vercel
-1. ارفع المشروع إلى GitHub.
-2. في Vercel اختر **Import Project** من GitHub.
-3. Build Command: `npm run build`.
-4. Output Directory: `dist`.
-5. أضف Environment Variables:
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_PUBLISHABLE_KEY`
-6. Deploy.
 
-ملف `vercel.json` موجود لتوجيه المسارات إلى `index.html` عند الحاجة.
+- Framework: Vite
+- Build Command: `npm run build`
+- Output Directory: `dist`
+- Environment Variables: `VITE_SUPABASE_URL` و`VITE_SUPABASE_PUBLISHABLE_KEY`
+- `vercel.json` لا يحتوي على catch-all rewrite؛ الصفحات `index.html`, `login.html`, `account.html`, `app.html`, `dashboard.html` تُبنى كـ MPA.
 
-## GitHub
-يمكن رفع المشروع مباشرة:
+## ملاحظات رفع الملفات
 
-```bash
-git init
-git add .
-git commit -m "CODEX App Store 3.0 Supabase migration"
-git branch -M main
-git remote add origin YOUR_GITHUB_REPOSITORY_URL
-git push -u origin main
-```
-
-يوجد GitHub Actions workflow في `.github/workflows/build.yml` للتأكد من أن المشروع يبني بنجاح عند كل Push/PR.
-
-## الأمان
-- Frontend يستخدم Publishable/Anon key فقط.
-- لا يوجد Service Role Key في JavaScript أو `.env.example`.
-- صلاحية Admin يتم فحصها في PostgreSQL عبر RLS وليس بإخفاء زر فقط.
-- كلمات المرور يديرها Supabase Auth ولا يتم تخزينها في `profiles`.
-- ملفات APK/EXE العامة يمكن تنزيلها عبر Storage، بينما الرفع/التعديل محمي بسياسات Admin.
+الرفع العادي مناسب للملفات الصغيرة. النسخة تستخدم `tus-js-client` للملفات التي تتجاوز 6MB، مع progress وretry، لأن Supabase توصي بالرفع المتدرج لهذه الملفات.

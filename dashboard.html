@@ -9,7 +9,7 @@
 <body class="dashboard-page">
 <header class="dashboard-navbar">
   <a href="index.html" class="dashboard-brand"><div class="dashboard-logo"><img src="assets/codex-logo.png" alt="CODEX"><span>C</span></div><div><strong>CODEX</strong><small>Control Panel</small></div></a>
-  <div class="dashboard-user"><div><strong id="adminName">Admin</strong><small id="adminEmail">admin</small></div><a class="mini-btn" href="account.html">حسابي</a><button id="logoutBtn" class="logout-btn" type="button">تسجيل الخروج</button></div>
+  <div class="dashboard-user"><div><strong id="adminName">Admin</strong><small id="adminEmail">admin</small></div><a class="mini-btn" href="account.html">حسابي</a><button id="logoutBtn" class="logout-btn" type="button" data-logout>تسجيل الخروج</button></div>
 </header>
 <main class="dashboard-container">
 <section class="dashboard-heading"><div><span>CONTROL PANEL</span><h1>لوحة التحكم</h1><p>إدارة التطبيقات والمستخدمين وحسابات الأدمن من مكان واحد.</p></div><a href="index.html" class="view-store-btn">فتح المتجر ↗</a></section>
@@ -19,38 +19,38 @@
   <div class="dashboard-stat"><span>👑</span><div><small>Admins</small><strong id="totalAdmins">0</strong></div></div>
 </section>
 <section class="dashboard-panel">
-<div class="panel-header"><div><span>STORE MANAGEMENT</span><h2>إضافة تطبيق جديد</h2></div></div>
+<div class="panel-header"><div><span>STORE MANAGEMENT</span><h2>إضافة تطبيق جديد</h2><small>أضف EXE أو APK أو الاثنين. صورة التطبيق اختيارية.</small></div></div>
 <form id="addAppForm" class="add-app-form">
 <div class="form-field"><label>اسم التطبيق</label><input id="newAppName" required placeholder="CODEX Notes"></div>
 <div class="form-field"><label>الوصف</label><input id="newAppDescription" required placeholder="وصف التطبيق"></div>
 <div class="form-field"><label>التصنيف</label><select id="newAppCategory"><option value="business">الأعمال</option><option value="education">التعليم</option><option value="health">الصحة</option><option value="productivity">الإنتاجية</option><option value="games">الألعاب</option><option value="tools">الأدوات</option></select></div>
 <div class="form-field"><label>الإصدار</label><input id="newAppVersion" required placeholder="1.0.0"></div>
-<div class="form-field"><label>ملف Windows — EXE</label><label class="file-picker"><input id="newAppExe" type="file" accept=".exe"><span>اختيار ملف EXE</span><strong data-file-label="exe">لم يتم اختيار ملف</strong></label></div>
-<div class="form-field"><label>ملف Android — APK</label><label class="file-picker"><input id="newAppApk" type="file" accept=".apk"><span>اختيار ملف APK</span><strong data-file-label="apk">لم يتم اختيار ملف</strong></label></div>
-<div class="form-field"><label>أيقونة التطبيق</label><label class="file-picker image-picker"><input id="newAppIconFile" type="file" accept=".png,.jpg,.jpeg,.webp"><span>اختيار صورة من الجهاز</span><strong data-file-label="icon">PNG / JPG / WEBP</strong></label></div>
-<div class="form-field"><label>اسم الأيقونة النصي — اختياري</label><input id="newAppIcon" maxlength="2" placeholder="C"></div>
+<div class="form-field"><label>ملف Windows — EXE</label><label class="file-picker"><input id="newAppExe" type="file" accept=".exe,.EXE" aria-label="اختيار ملف EXE"><span class="file-picker-icon">＋</span><strong>اختيار ملف EXE</strong><em data-file-label="exe">لم يتم اختيار ملف</em><small data-file-size="exe"></small></label></div>
+<div class="form-field"><label>ملف Android — APK</label><label class="file-picker"><input id="newAppApk" type="file" accept=".apk,.APK" aria-label="اختيار ملف APK"><span class="file-picker-icon">＋</span><strong>اختيار ملف APK</strong><em data-file-label="apk">لم يتم اختيار ملف</em><small data-file-size="apk"></small></label></div>
+<div class="form-field"><label>أيقونة التطبيق <small class="optional-badge">اختياري</small></label><label class="file-picker image-picker"><input id="newAppIconFile" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"><span>اختيار صورة من الجهاز</span><strong data-file-label="icon">PNG / JPG / WEBP</strong><small data-file-size="icon"></small></label></div>
 <div class="form-field wide"><div class="upload-summary"><div><span>الحجم الإجمالي</span><strong id="newAppSize">سيتم حسابه تلقائيًا</strong></div><div><span>النظام</span><strong id="newAppPlatform">سيتم تحديده تلقائيًا</strong></div></div></div>
-<div class="form-field wide"><small class="form-help">ارفع EXE أو APK أو الاثنين معًا. صورة الأيقونة اختيارية. الحجم والنظام يتم حسابهما تلقائيًا، ولا تحتاج لإدخال رابط تحميل.</small></div>
+<div class="form-field wide"><label>ملاحظات الإصدار <small class="optional-badge">اختياري</small></label><textarea id="newAppChangelog" rows="3" placeholder="ما الجديد في هذا الإصدار؟"></textarea></div>
+<div class="form-field wide"><small class="form-help">ارفع EXE أو APK أو الاثنين معًا. صورة الأيقونة اختيارية. الملفات الكبيرة تستخدم رفعًا متدرجًا مع نسبة تقدم.</small></div>
 <button type="submit" class="add-app-btn">+ رفع التطبيق وإضافته</button>
 </form>
 </section>
-<section class="dashboard-panel"><div class="panel-header"><div><span>APPLICATIONS</span><h2>إدارة التطبيقات</h2></div><small>يمكنك فتح صفحة التطبيق أو تعديله أو حذفه.</small></div><div id="adminAppsList" class="admin-apps-list"></div></section>
-<section class="dashboard-panel"><div class="panel-header"><div><span>ADMIN MANAGEMENT</span><h2>إضافة Admin</h2></div></div>
+<section class="dashboard-panel"><div class="panel-header"><div><span>APPLICATIONS</span><h2>إدارة التطبيقات</h2></div><div class="panel-header-actions"><small>تحديث الملفات والصورة اختياري. التغييرات تظهر في المتجر مباشرة.</small><button id="refreshDashboardBtn" class="mini-btn refresh-btn" type="button">↻ تحديث</button></div></div><div id="adminAppsList" class="admin-apps-list"></div></section>
+<section class="dashboard-panel"><div class="panel-header"><div><span>ACCOUNT MANAGEMENT</span><h2>إضافة حساب</h2><small>يمكن للأدمن إنشاء مستخدم عادي أو Admin.</small></div></div>
 <form id="addAdminForm" class="add-app-form admin-form">
-<div class="form-field"><label>اسم الأدمن</label><input id="adminNameInput" required></div><div class="form-field"><label>الإيميل</label><input id="adminEmailInput" type="email" required></div><div class="form-field"><label>كلمة المرور</label><input id="adminPasswordInput" type="password" minlength="6" required></div><div class="form-field"><label>تأكيد كلمة المرور</label><input id="adminPasswordConfirm" type="password" minlength="6" required></div><button class="add-app-btn" type="submit">+ إضافة Admin</button>
+<div class="form-field"><label>اسم الأدمن</label><input id="adminNameInput" required></div><div class="form-field"><label>الإيميل</label><input id="adminEmailInput" type="email" required></div><div class="form-field"><label>كلمة المرور</label><input id="adminPasswordInput" type="password" minlength="6" required></div><div class="form-field"><label>تأكيد كلمة المرور</label><input id="adminPasswordConfirm" type="password" minlength="6" required></div><div class="form-field"><label>نوع الحساب</label><select id="adminRoleInput"><option value="user">مستخدم</option><option value="admin">Admin</option></select></div><button class="add-app-btn" type="submit">+ إضافة حساب</button>
 </form></section>
 <section class="dashboard-panel"><div class="panel-header"><div><span>USERS</span><h2>إدارة المستخدمين</h2></div><small>لا يتم عرض كلمات المرور. يمكن للأدمن تغييرها فقط.</small></div><div id="usersList" class="users-list"></div></section>
 </main>
 <div id="appEditModal" class="codex-modal"><div class="modal-card"><div class="modal-header"><div><span>APPLICATION EDITOR</span><h2>تعديل التطبيق</h2></div><button data-close-modal type="button">×</button></div>
 <form id="appEditForm" class="add-app-form"><input type="hidden" name="id">
 <div class="form-field"><label>الاسم</label><input name="name" required></div><div class="form-field"><label>الوصف</label><input name="description" required></div><div class="form-field"><label>الإصدار</label><input name="version" required></div><div class="form-field"><label>التصنيف</label><select name="category"><option value="business">الأعمال</option><option value="education">التعليم</option><option value="health">الصحة</option><option value="productivity">الإنتاجية</option><option value="games">الألعاب</option><option value="tools">الأدوات</option></select></div>
-<div class="form-field"><label>تحديث EXE — اختياري</label><label class="file-picker"><input name="exeFile" type="file" accept=".exe"><span>اختيار EXE جديد</span><strong data-file-status="windows">لم يتم اختيار ملف جديد</strong></label></div>
-<div class="form-field"><label>تحديث APK — اختياري</label><label class="file-picker"><input name="apkFile" type="file" accept=".apk"><span>اختيار APK جديد</span><strong data-file-status="android">لم يتم اختيار ملف جديد</strong></label></div>
-<div class="form-field"><label>تغيير الأيقونة — اختياري</label><label class="file-picker image-picker"><input name="iconFile" type="file" accept=".png,.jpg,.jpeg,.webp"><span>اختيار صورة جديدة</span><strong>PNG / JPG / WEBP</strong></label></div>
-<div class="form-field"><label>معاينة الأيقونة</label><div class="icon-preview" data-icon-preview><span>C</span></div></div>
-<div class="form-field"><label>الأيقونة النصية — احتياطي</label><input name="iconText" maxlength="2"></div>
-<div class="form-field wide"><div class="edit-file-note">الحجم والنظام يتم تحديثهما تلقائيًا حسب الملفات الموجودة والجديدة.</div></div>
-<div class="form-field wide"><label>رابط خارجي — اختياري</label><input name="downloadUrl" type="url" placeholder="يستخدم فقط إذا لم توجد ملفات محلية"></div>
+<div class="form-field"><label>تحديث EXE <small class="optional-badge">اختياري</small></label><label class="file-picker"><input name="exeFile" type="file" accept=".exe,.EXE"><span class="file-picker-icon">＋</span><strong>اختيار EXE جديد</strong><em data-file-status="windows">لم يتم اختيار ملف جديد</em></label><label class="check-option"><input name="removeExe" type="checkbox"> إزالة EXE الحالي</label></div>
+<div class="form-field"><label>تحديث APK <small class="optional-badge">اختياري</small></label><label class="file-picker"><input name="apkFile" type="file" accept=".apk,.APK"><span class="file-picker-icon">＋</span><strong>اختيار APK جديد</strong><em data-file-status="android">لم يتم اختيار ملف جديد</em></label><label class="check-option"><input name="removeApk" type="checkbox"> إزالة APK الحالي</label></div>
+<div class="form-field"><label>تغيير صورة التطبيق <small class="optional-badge">اختياري</small></label><label class="file-picker image-picker"><input name="iconFile" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"><span class="file-picker-icon">◉</span><strong>اختيار صورة جديدة</strong><em>PNG / JPG / WEBP</em></label></div>
+<div class="form-field"><label>معاينة الأيقونة</label><div class="icon-preview" data-icon-preview><span>C</span></div><label class="check-option"><input name="removeIcon" type="checkbox"> إزالة الصورة الحالية</label></div>
+
+<div class="form-field wide"><div class="edit-file-note"><strong>الملفات الحالية:</strong> <span data-current-files>سيتم تحميلها…</span><br>الحجم والنظام يتم تحديثهما تلقائيًا حسب الملفات الحالية أو الجديدة. الصورة اختيارية.</div></div>
+<div class="form-field wide"><label>ملاحظات الإصدار — اختياري</label><textarea name="changelog" rows="3" placeholder="ما الجديد في هذا الإصدار؟"></textarea></div><div class="form-field wide"><label>رابط خارجي — اختياري</label><input name="downloadUrl" type="url" placeholder="يستخدم فقط إذا لم توجد ملفات محلية"></div>
 <button class="add-app-btn" type="submit">حفظ التحديث والملفات</button></form>
 </div></div>
 <script type="module" src="/script.js"></script>
