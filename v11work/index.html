@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <meta name="description" content="CODEX App Store - اكتشف وحمّل أفضل التطبيقات والبرامج.">
+
+    <title>CODEX App Store</title>
+
+    <link rel="stylesheet" href="style.css">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    <link
+        href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet">
+</head>
+
+<body>
+
+    <!-- =========================
+         Navbar
+    ========================== -->
+
+    <header class="navbar">
+
+        <a href="index.html" class="logo">
+
+            <!--
+                ضع لوجو CODEX الحقيقي داخل:
+                assets/codex-logo.png
+
+                لو الصورة غير موجودة، سيظهر حرف C تلقائيًا.
+            -->
+
+            <div class="logo-image-wrapper">
+                <img
+                    src="assets/codex-logo.png"
+                    alt="CODEX Logo"
+                    class="logo-image"
+                    onerror="this.style.display='none'; this.nextElementSibling.style.display='grid';"
+                >
+
+                <span class="logo-fallback">C</span>
+            </div>
+
+            <span class="logo-text">CODEX</span>
+
+        </a>
+
+
+        <nav class="nav-links">
+
+            <a href="index.html" class="active">
+                الرئيسية
+            </a>
+
+            <a href="#apps">
+                التطبيقات
+            </a>
+
+            <a href="#categories">
+                التصنيفات
+            </a>
+
+            <a href="#updates">
+                آخر الإصدارات
+            </a>
+
+        </nav>
+
+
+        <div class="nav-actions">
+
+            <a
+                class="login-btn"
+                id="loginBtn"
+                href="/login.html"
+            >
+                تسجيل الدخول
+            </a>
+
+        </div>
+
+    </header>
+
+
+    <main>
+
+        <!-- =========================
+             Hero Section
+        ========================== -->
+
+        <section class="hero">
+
+            <div class="hero-content">
+
+                <span class="hero-badge">
+                    مرحبًا بك في CODEX
+                </span>
+
+
+                <h1>
+                    كل تطبيقاتك
+                    <br>
+
+                    <span>
+                        في مكان واحد.
+                    </span>
+                </h1>
+
+
+                <p>
+                    اكتشف برامج جديدة، وتصفح أحدث الإصدارات،
+                    وحمّل التطبيقات اللي تحتاجها بسهولة.
+                </p>
+
+
+                <!-- Search -->
+
+                <div class="hero-search">
+
+                    <span class="search-icon">
+                        ⌕
+                    </span>
+
+                    <input
+                        type="search"
+                        id="searchInput"
+                        placeholder="ابحث عن تطبيق..."
+                        autocomplete="off"
+                    >
+
+                    <button
+                        id="searchBtn"
+                        type="button"
+                    >
+                        بحث
+                    </button>
+
+                </div>
+
+
+
+
+            </div>
+
+
+            <!-- Hero Visual -->
+
+            <div class="hero-visual">
+
+                <div class="hero-glow"></div>
+
+
+                <div class="hero-card">
+
+                    <div class="hero-card-icon">
+
+                        <img
+                            src="assets/codex-logo.png"
+                            alt="CODEX"
+                            onerror="this.style.display='none'; this.nextElementSibling.style.display='grid';"
+                        >
+
+                        <span class="hero-logo-fallback">
+                            C
+                        </span>
+
+                    </div>
+
+
+                    <h2>
+                        CODEX
+                    </h2>
+
+
+                    <p>
+                        More Apps. More Possibilities.
+                    </p>
+
+
+                    <div class="hero-card-line"></div>
+
+
+                    <span class="hero-card-label">
+                        APP STORE
+                    </span>
+
+                </div>
+
+
+                <div class="floating-icon icon-one">
+                    ✦
+                </div>
+
+                <div class="floating-icon icon-two">
+                    ⬡
+                </div>
+
+                <div class="floating-icon icon-three">
+                    ✧
+                </div>
+
+            </div>
+
+        </section>
+
+
+
+        <!-- =========================
+             Categories
+        ========================== -->
+
+        <section
+            class="section"
+            id="categories"
+        >
+
+            <div class="section-heading">
+
+                <div>
+
+                    <span class="section-label">
+                        اكتشف
+                    </span>
+
+                    <h2>
+                        تصفح التصنيفات
+                    </h2>
+
+                </div>
+
+            </div>
+
+
+            <div class="categories">
+
+                <button
+                    class="category active"
+                    data-category="all"
+                    type="button"
+                >
+                    <span>✦</span>
+                    الكل
+                </button>
+
+
+                <button
+                    class="category"
+                    data-category="business"
+                    type="button"
+                >
+                    <span>▣</span>
+                    الأعمال
+                </button>
+
+
+                <button
+                    class="category"
+                    data-category="education"
+                    type="button"
+                >
+                    <span>▤</span>
+                    التعليم
+                </button>
+
+
+                <button
+                    class="category"
+                    data-category="health"
+                    type="button"
+                >
+                    <span>♡</span>
+                    الصحة
+                </button>
+
+
+                <button
+                    class="category"
+                    data-category="productivity"
+                    type="button"
+                >
+                    <span>▥</span>
+                    الإنتاجية
+                </button>
+
+
+                <button
+                    class="category"
+                    data-category="games"
+                    type="button"
+                >
+                    <span>♧</span>
+                    الألعاب
+                </button>
+
+
+                <button
+                    class="category"
+                    data-category="tools"
+                    type="button"
+                >
+                    <span>⚙</span>
+                    الأدوات
+                </button>
+
+            </div>
+
+        </section>
+
+
+
+        <!-- =========================
+             Featured Apps
+        ========================== -->
+
+        <section
+            class="section"
+            id="apps"
+        >
+
+            <div class="section-heading">
+
+                <div>
+
+                    <span class="section-label">
+                        مختارة لك
+                    </span>
+
+                    <h2>
+                        التطبيقات المميزة
+                    </h2>
+
+                </div>
+
+
+                <a
+                    href="#apps"
+                    class="view-all"
+                >
+                    عرض الكل ←
+                </a>
+
+            </div>
+
+
+            <div
+                class="apps-grid"
+                id="appsGrid"
+            >
+                <!-- JavaScript -->
+            </div>
+
+
+            <div
+                class="empty-state"
+                id="emptyState"
+                hidden
+            >
+
+                <span>
+                    ⌕
+                </span>
+
+                <h3>
+                    ملقيناش تطبيقات
+                </h3>
+
+                <p>
+                    جرّب تبحث باسم تاني أو اختار تصنيف مختلف.
+                </p>
+
+            </div>
+
+        </section>
+
+
+
+        <!-- =========================
+             Latest Releases
+        ========================== -->
+
+        <section
+            class="section"
+            id="updates"
+        >
+
+            <div class="section-heading">
+
+                <div>
+
+                    <span class="section-label">
+                        وصل حديثًا
+                    </span>
+
+                    <h2>
+                        آخر الإصدارات
+                    </h2>
+
+                </div>
+
+            </div>
+
+
+            <div
+                class="releases-list"
+                id="releasesList"
+            >
+                <!-- JavaScript -->
+            </div>
+
+        </section>
+
+    </main>
+
+
+
+    <!-- =========================
+         Footer
+    ========================== -->
+
+    <footer class="footer">
+
+        <div class="footer-brand">
+
+            <div class="footer-logo-wrapper">
+
+                <img
+                    src="assets/codex-logo.png"
+                    alt="CODEX"
+                    class="footer-logo"
+                    onerror="this.style.display='none'; this.nextElementSibling.style.display='grid';"
+                >
+
+                <span class="footer-logo-fallback">
+                    C
+                </span>
+
+            </div>
+
+            <strong>
+                CODEX
+            </strong>
+
+            <span>
+                App Store
+            </span>
+
+        </div>
+
+
+        <p>
+            © 2026 CODEX App Store — جميع الحقوق محفوظة.
+        </p>
+
+
+        <div class="footer-links">
+            <a href="index.html">الرئيسية</a>
+            <a href="index.html#apps">التطبيقات</a>
+            <a href="index.html#categories">التصنيفات</a>
+            <a href="index.html#updates">آخر الإصدارات</a>
+        </div>
+
+    </footer>
+
+
+    <script type="module" src="/script.js"></script>
+
+</body>
+
+</html>

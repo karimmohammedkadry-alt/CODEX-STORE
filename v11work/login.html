@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>تسجيل الدخول | CODEX App Store</title>
+
+    <link
+        rel="stylesheet"
+        href="style.css"
+    >
+
+    <link
+        rel="preconnect"
+        href="https://fonts.googleapis.com"
+    >
+
+    <link
+        rel="preconnect"
+        href="https://fonts.gstatic.com"
+        crossorigin
+    >
+
+    <link
+        href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet"
+    >
+</head>
+
+
+<body class="auth-page">
+
+    <main class="auth-container">
+
+        <a
+            href="index.html"
+            class="auth-logo"
+        >
+
+            <div class="auth-logo-icon">
+
+                <img
+                    src="assets/codex-logo.png"
+                    alt="CODEX"
+                    onerror="this.style.display='none'; this.nextElementSibling.style.display='grid';"
+                >
+
+                <span>C</span>
+
+            </div>
+
+            <strong>CODEX</strong>
+
+        </a>
+
+
+        <div class="auth-card">
+
+            <div class="auth-header">
+
+                <span class="auth-small-title">
+                    CODEX APP STORE
+                </span>
+
+                <h1 id="authTitle">
+                    تسجيل الدخول
+                </h1>
+
+                <p id="authDescription">
+                    ادخل إلى حسابك للوصول إلى المتجر.
+                </p>
+
+            </div>
+
+
+            <!-- =========================
+                 Login Form
+            ========================== -->
+
+            <form
+                id="loginForm"
+                class="auth-form"
+            >
+
+                <label>
+                    البريد الإلكتروني
+                </label>
+
+                <input
+                    id="loginEmail"
+                    type="email"
+                    placeholder="example@email.com"
+                    required
+                >
+
+
+                <label>
+                    كلمة المرور
+                </label>
+
+                <div class="password-field auth-password-field">
+                    <input id="loginPassword" type="password" placeholder="••••••••" required>
+                    <button data-toggle-password="loginPassword" type="button">👁</button>
+                </div>
+
+                <button type="submit" class="auth-submit">تسجيل الدخول</button>
+                <button type="button" class="auth-link-button" id="forgotPasswordBtn">نسيت كلمة المرور؟</button>
+
+            </form>
+
+
+
+            <form id="passwordResetForm" class="auth-form hidden">
+                <label>كلمة المرور الجديدة</label>
+                <div class="password-field auth-password-field">
+                    <input id="resetPassword" type="password" minlength="6" placeholder="••••••••" required>
+                    <button data-toggle-password="resetPassword" type="button">👁</button>
+                </div>
+                <label>تأكيد كلمة المرور</label>
+                <div class="password-field auth-password-field">
+                    <input id="resetConfirm" type="password" minlength="6" placeholder="••••••••" required>
+                    <button data-toggle-password="resetConfirm" type="button">👁</button>
+                </div>
+                <button type="submit" class="auth-submit">حفظ كلمة المرور الجديدة</button>
+            </form>
+
+            <!-- =========================
+                 Register Form
+            ========================== -->
+
+            <form
+                id="registerForm"
+                class="auth-form hidden"
+            >
+
+                <label>
+                    الاسم
+                </label>
+
+                <input
+                    id="registerName"
+                    type="text"
+                    placeholder="اسمك"
+                    required
+                >
+
+
+                <label>
+                    البريد الإلكتروني
+                </label>
+
+                <input
+                    id="registerEmail"
+                    type="email"
+                    placeholder="example@email.com"
+                    required
+                >
+
+
+                <label>
+                    كلمة المرور
+                </label>
+
+                <div class="password-field auth-password-field">
+                    <input id="registerPassword" type="password" placeholder="••••••••" minlength="6" required>
+                    <button data-toggle-password="registerPassword" type="button">👁</button>
+                </div>
+
+                <label>
+                    تأكيد كلمة المرور
+                </label>
+
+                <div class="password-field auth-password-field">
+                    <input id="registerConfirm" type="password" placeholder="••••••••" minlength="6" required>
+                    <button data-toggle-password="registerConfirm" type="button">👁</button>
+                </div>
+
+                <button
+                    type="submit"
+                    class="auth-submit"
+                >
+                    إنشاء الحساب
+                </button>
+
+            </form>
+
+
+            <div
+                id="authMessage"
+                class="auth-message"
+            ></div>
+
+
+            <div class="auth-switch">
+
+                <span id="switchText">
+                    ليس لديك حساب؟
+                </span>
+
+                <button
+                    id="switchAuth"
+                    type="button"
+                >
+                    إنشاء حساب
+                </button>
+
+            </div>
+
+
+            <a
+                href="index.html"
+                class="back-store"
+            >
+                ← العودة للمتجر
+            </a>
+
+        </div>
+
+    </main>
+
+
+    <script type="module" src="/script.js"></script>
+
+</body>
+
+</html>
