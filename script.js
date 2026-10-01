@@ -122,9 +122,9 @@ function fileBadgeMarkup(app) {
   return `<div class="file-badges">${files.map((file) => `<span>${file.platform === 'windows' ? 'EXE' : 'APK'} · ${escapeHTML(formatFileSize(file.size_bytes))}</span>`).join('')}</div>`;
 }
 
-function publicUrl(path, downloadName = null) {
+function publicUrl(path, downloadName = null, bucket = 'app-files') {
   const options = downloadName ? { download: downloadName } : undefined;
-  return supabase.storage.from('app-files').getPublicUrl(path, options).data.publicUrl;
+  return supabase.storage.from(bucket).getPublicUrl(path, options).data.publicUrl;
 }
 
 function withTimeout(promise, ms, message = 'انتهت مهلة الاتصال.') {
@@ -163,27 +163,10 @@ function hidePageLoader(delay = 250) {
 }
 
 function setupNavigationEffects() {
-  document.addEventListener('click', (event) => {
-    const link = event.target.closest('a[href]');
-    if (link && !event.defaultPrevented && !link.target && !link.hasAttribute('download')) {
-      const href = link.getAttribute('href') || '';
-      const isInternal = href && !href.startsWith('#') && !/^(https?:|mailto:|tel:|javascript:)/i.test(href);
-      if (isInternal) {
-        const loader = ensurePageLoader();
-        loader.querySelector('.page-loader-stage').textContent = 'جاري فتح الصفحة...';
-        loader.querySelector('.page-loader-track i').style.width = '72%';
-      }
-    }
-
-    const button = event.target.closest('button, .mini-btn, .login-btn, .secondary-btn, .download-btn, .view-store-btn, .back-button, .add-app-btn');
-    if (button && !button.disabled) {
-      button.classList.remove('codex-tap');
-      void button.offsetWidth;
-      button.classList.add('codex-tap');
-    }
+  // Keep navigation native and fast. No fullscreen loader and no tap animation.
+  window.addEventListener('pageshow', () => {
+    document.body.classList.remove('codex-navigating');
   }, { passive: true });
-
-  window.addEventListener('pageshow', () => hidePageLoader(100));
 }
 
 async function requireConfig() {
@@ -251,17 +234,21 @@ async function isAdmin() {
 }
 
 async function loadApps(showError = true) {
-  const { data, error } = await supabase
-    .from('apps')
-    .select('*,app_files(*)')
-    .order('updated_at', { ascending: false });
-
-  if (error) {
+  try {
+    const result = await withTimeout(
+      supabase
+        .from('apps')
+        .select('id,name,slug,description,changelog,category,category_name,version,icon_text,icon_url,icon_storage_path,rating,download_url,download_count,total_size_bytes,platform,created_by,created_at,updated_at,app_files(id,app_id,platform,file_name,storage_path,mime_type,size_bytes,created_at)')
+        .order('updated_at', { ascending: false }),
+      12000,
+      'انتهت مهلة تحميل التطبيقات.'
+    );
+    if (result.error) throw result.error;
+    apps = result.data || [];
+  } catch (error) {
     console.error('loadApps', error);
     if (showError) toast(friendlyError(error, 'تعذر تحميل التطبيقات.'), 'error');
-    return apps;
   }
-  apps = data || [];
   return apps;
 }
 
@@ -329,7 +316,7 @@ function filterHomeApps() {
 function buildDownloadLink(file) {
   const url = publicUrl(file.storage_path, file.file_name);
   const label = file.platform === 'windows' ? 'Windows / EXE' : 'Android / APK';
-  return `<a class="file-download-option" href="${escapeHTML(url)}" download="${escapeHTML(file.file_name)}" target="_blank" rel="noopener"><span>تحميل ${label}</span><strong>${escapeHTML(formatFileSize(file.size_bytes))}</strong></a>`;
+  return `<a class="file-download-option" data-download-app="${escapeHTML(file.app_id || '')}" href="${escapeHTML(url)}" aria-label="تحميل ${escapeHTML(label)}"><span>تحميل ${label}</span><strong>${escapeHTML(formatFileSize(file.size_bytes))}</strong></a>`;
 }
 
 function favoriteStorageKey() {
@@ -469,8 +456,9 @@ async function loadAppDetails() {
   const options = document.getElementById('downloadOptions');
   const files = app.app_files || [];
   if (options) {
-    options.innerHTML = files.map(buildDownloadLink).join('');
+    options.innerHTML = files.map((file) => buildDownloadLink(file)).join('');
     options.classList.toggle('open', files.length > 0);
+    options.querySelectorAll('[data-download-app]').forEach((link) => link.addEventListener('click', () => { void recordDownload(id); }));
   }
 
   const main = getFile(app, 'windows') || getFile(app, 'android');
@@ -489,8 +477,7 @@ async function loadAppDetails() {
         const url = publicUrl(main.storage_path, main.file_name);
         const anchor = document.createElement('a');
         anchor.href = url;
-        anchor.target = '_blank';
-        anchor.rel = 'noopener';
+        anchor.download = main.file_name;
         document.body.appendChild(anchor);
         anchor.click();
         anchor.remove();
@@ -802,11 +789,13 @@ function makeSlug(name) {
 
 function validateUpload(file, kind) {
   if (!file) return true;
-  if (!file.name || !file.size) throw new Error('الملف المختار فارغ أو غير صالح.');
+  if (!file.name || Number(file.size) <= 0) throw new Error('الملف المختار فارغ أو غير صالح.');
   const extension = (file.name.split('.').pop() || '').toLowerCase();
   if (kind === 'windows' && extension !== 'exe') throw new Error('ملف Windows يجب أن يكون بصيغة EXE.');
   if (kind === 'android' && extension !== 'apk') throw new Error('ملف Android يجب أن يكون بصيغة APK.');
   if (kind === 'icon' && !['png', 'jpg', 'jpeg', 'webp'].includes(extension)) throw new Error('صورة التطبيق يجب أن تكون PNG أو JPG أو JPEG أو WEBP.');
+  if (kind === 'icon' && Number(file.size) > 8 * 1024 * 1024) throw new Error('صورة التطبيق كبيرة جدًا. الحد المسموح 8MB.');
+  if (Number(file.size) > 5 * 1024 ** 3) throw new Error('الملف أكبر من الحد المسموح للتخزين (5GB).');
   return true;
 }
 
@@ -820,43 +809,33 @@ function getMimeType(file) {
   return file?.type || 'application/octet-stream';
 }
 
-async function uploadStorageFile(file, path, progress, label = 'رفع الملف') {
-  const kind = path.includes('/windows/') ? 'windows' : path.includes('/android/') ? 'android' : path.includes('/icons/') ? 'icon' : null;
-  validateUpload(file, kind);
-  const SIX_MB = 6 * 1024 * 1024;
-  progress?.(0, `${label} — بدء الرفع`);
+function safeRandomId() {
+  try { return crypto.randomUUID(); } catch (_) { return `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`; }
+}
 
-  if (file.size <= SIX_MB) {
-    const { error } = await supabase.storage.from('app-files').upload(path, file, {
-      upsert: true,
-      contentType: getMimeType(file),
-      cacheControl: '3600',
-    });
-    if (error) throw new Error(`${label}: ${friendlyError(error, error.message || 'فشل رفع الملف.')}`);
-    progress?.(100, `${label} — تم`);
-    return path;
-  }
-
+async function resumableUpload(file, path, progress, label, bucket = 'app-files') {
   const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
   const token = sessionData?.session?.access_token;
-  if (sessionError || !token) throw new Error('انتهت جلسة الأدمن. سجّل الدخول مرة أخرى قبل رفع ملف كبير.');
+  if (sessionError || !token) throw new Error('انتهت جلسة الأدمن. سجّل الدخول مرة أخرى قبل رفع الملف.');
 
   const projectRef = new URL(SUPABASE_URL).hostname.split('.')[0];
   const endpoint = `https://${projectRef}.storage.supabase.co/storage/v1/upload/resumable`;
+  const chunkSize = 6 * 1024 * 1024;
 
   await new Promise((resolve, reject) => {
     const upload = new TusUpload(file, {
       endpoint,
-      retryDelays: [0, 1000, 3000, 5000, 10000],
-      chunkSize: SIX_MB,
+      retryDelays: [0, 1000, 3000, 5000, 10000, 15000],
+      chunkSize,
       uploadDataDuringCreation: true,
+      removeFingerprintOnSuccess: true,
       headers: {
         authorization: `Bearer ${token}`,
         apikey: SUPABASE_KEY,
         'x-upsert': 'true',
       },
       metadata: {
-        bucketName: 'app-files',
+        bucketName: bucket,
         objectName: path,
         contentType: getMimeType(file),
         cacheControl: '3600',
@@ -875,23 +854,56 @@ async function uploadStorageFile(file, path, progress, label = 'رفع المل�
   return path;
 }
 
+async function uploadStorageFile(file, path, progress, label = 'رفع الملف', bucket = 'app-files') {
+  const kind = path.includes('/windows/') ? 'windows' : path.includes('/android/') ? 'android' : path.includes('/icons/') ? 'icon' : null;
+  validateUpload(file, kind);
+  const SIX_MB = 6 * 1024 * 1024;
+  progress?.(0, `${label} — بدء الرفع`);
+
+  // Large application files use TUS directly. This is the recommended path for uploads > 6MB.
+  if (file.size > SIX_MB) {
+    return resumableUpload(file, path, progress, label, bucket);
+  }
+
+  try {
+    const { error } = await supabase.storage.from(bucket).upload(path, file, {
+      upsert: true,
+      contentType: getMimeType(file),
+      cacheControl: '3600',
+    });
+    if (error) throw error;
+    progress?.(100, `${label} — تم`);
+    return path;
+  } catch (error) {
+    // A small file may still be rejected by a proxy/limit. One resumable retry avoids a false failure.
+    if (file.size > 1024 * 1024) {
+      try {
+        progress?.(5, `${label} — إعادة المحاولة بطريقة قابلة للاستئناف`);
+        return await resumableUpload(file, path, progress, label, bucket);
+      } catch (retryError) {
+        throw new Error(`${label}: ${friendlyError(retryError, retryError?.message || friendlyError(error, 'فشل رفع الملف.'))}`);
+      }
+    }
+    throw new Error(`${label}: ${friendlyError(error, error?.message || 'فشل رفع الملف.')}`);
+  }
+}
+
 async function uploadIcon(file, appId, progress) {
   if (!file) return null;
   validateUpload(file, 'icon');
   const extension = file.name.split('.').pop().toLowerCase();
-  const path = `icons/${appId}/${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${extension}`;
-  await uploadStorageFile(file, path, progress, 'رفع صورة التطبيق');
-  return publicUrl(path);
+  const path = `icons/${appId}/${safeRandomId()}.${extension}`;
+  await uploadStorageFile(file, path, progress, 'رفع صورة التطبيق', 'app-icons');
+  return { path, url: publicUrl(path, null, 'app-icons') };
 }
 
 async function saveAppFile(appId, platform, file, existing, progress) {
   if (!file) return existing || null;
   validateUpload(file, platform);
   const extension = file.name.split('.').pop().toLowerCase();
-  const cleanName = file.name.replace(/[^\p{L}\p{N}._-]+/gu, '_');
-  const path = `apps/${appId}/${platform}/${Date.now()}-${Math.random().toString(36).slice(2, 7)}-${cleanName}`;
+  const path = `apps/${appId}/${platform}/${safeRandomId()}.${extension}`;
 
-  await uploadStorageFile(file, path, progress, `رفع ${platform === 'windows' ? 'EXE' : 'APK'}`);
+  await uploadStorageFile(file, path, progress, `رفع ${platform === 'windows' ? 'EXE' : 'APK'}`, 'app-files');
 
   const row = {
     app_id: appId,
@@ -907,9 +919,27 @@ async function saveAppFile(appId, platform, file, existing, progress) {
     await supabase.storage.from('app-files').remove([path]);
     throw new Error(`تم رفع الملف لكن تعذر تسجيله في قاعدة البيانات: ${friendlyError(error, error.message)}`);
   }
-
-  // Keep the previous storage object until the whole update transaction succeeds.
   return data;
+}
+
+function legacyIconRef(app) {
+  if (app?.icon_storage_path) return { bucket: 'app-icons', path: app.icon_storage_path };
+  if (!app?.icon_url) return null;
+  try {
+    const u = new URL(app.icon_url);
+    const refs = [
+      { prefix: '/storage/v1/object/public/app-icons/', bucket: 'app-icons' },
+      { prefix: '/storage/v1/object/public/app-files/', bucket: 'app-files' },
+    ];
+    for (const ref of refs) {
+      if (u.pathname.includes(ref.prefix)) return { bucket: ref.bucket, path: decodeURIComponent(u.pathname.split(ref.prefix)[1]) };
+    }
+  } catch (_) {}
+  return null;
+}
+
+function legacyIconPath(app) {
+  return legacyIconRef(app)?.path || null;
 }
 
 function selectedFilesSummary(form) {
@@ -935,6 +965,7 @@ async function createAppRecord(form) {
   const description = document.getElementById('newAppDescription')?.value.trim() || '';
   const category = document.getElementById('newAppCategory')?.value || 'tools';
   const version = document.getElementById('newAppVersion')?.value.trim() || '';
+  const changelog = document.getElementById('newAppChangelog')?.value.trim() || '';
   const summary = selectedFilesSummary(form);
 
   if (!name) return toast('اكتب اسم التطبيق.', 'error');
@@ -952,8 +983,8 @@ async function createAppRecord(form) {
 
   form.dataset.busy = '1';
   const button = form.querySelector('button[type="submit"]');
-  const originalButton = button?.textContent || '+ رفع التطبيق وإضافته';
-  if (button) { button.disabled = true; button.textContent = 'جاري رفع التطبيق…'; }
+  const originalButton = button?.textContent || 'رفع التطبيق وإضافته';
+  if (button) { button.disabled = true; button.textContent = 'جاري الرفع…'; }
 
   const progress = showOperationProgress('إضافة تطبيق جديد');
   let app = null;
@@ -977,8 +1008,12 @@ async function createAppRecord(form) {
       updated_at: new Date().toISOString(),
     };
 
-    progress.update(16, 'إنشاء سجل التطبيق');
-    const insert = await supabase.from('apps').insert(payload).select().single();
+    progress.update(15, 'إنشاء سجل التطبيق');
+    const insert = await withTimeout(
+      supabase.from('apps').insert(payload).select().single(),
+      12000,
+      'انتهت مهلة إنشاء التطبيق.'
+    );
     if (insert.error) throw new Error(`إنشاء سجل التطبيق: ${friendlyError(insert.error, insert.error.message)}`);
     app = insert.data;
 
@@ -988,9 +1023,8 @@ async function createAppRecord(form) {
 
     for (let index = 0; index < uploadTasks.length; index += 1) {
       const [platform, file] = uploadTasks[index];
-      const start = 22 + index * (46 / uploadTasks.length);
-      const end = start + 34;
-      progress.update(start, `رفع ${platform === 'windows' ? 'ملف EXE' : 'ملف APK'}…`);
+      const start = 22 + index * (48 / uploadTasks.length);
+      const end = start + 36;
       const row = await saveAppFile(app.id, platform, file, null, (local, label) => {
         const value = Math.round(start + (local / 100) * (end - start));
         progress.update(value, label);
@@ -998,30 +1032,33 @@ async function createAppRecord(form) {
       createdPaths.push(row.storage_path);
     }
 
-    progress.update(72, 'تأكيد الملفات وحساب الحجم');
-    const filesResult = await supabase.from('app_files').select('*').eq('app_id', app.id);
+    progress.update(73, 'تأكيد الملفات وحساب الحجم');
+    const filesResult = await supabase.from('app_files').select('id,app_id,platform,file_name,storage_path,mime_type,size_bytes').eq('app_id', app.id);
     if (filesResult.error) throw new Error(`قراءة ملفات التطبيق: ${friendlyError(filesResult.error, filesResult.error.message)}`);
     const files = filesResult.data || [];
-    if (!files.length) throw new Error('لم يتم تسجيل ملفات EXE/APK في قاعدة البيانات.');
+    if (!files.length) throw new Error('تم رفع الملف لكن لم يتم تسجيله في قاعدة البيانات.');
 
     const total = files.reduce((sum, file) => sum + Number(file.size_bytes || 0), 0);
-    const platform = files.length === 2 ? 'Windows + Android' : files[0]?.platform === 'android' ? 'Android' : files[0]?.platform === 'windows' ? 'Windows' : '—';
+    const platform = files.some((file) => file.platform === 'windows') && files.some((file) => file.platform === 'android')
+      ? 'Windows + Android'
+      : files.some((file) => file.platform === 'android') ? 'Android' : 'Windows';
     const meta = await supabase.from('apps').update({ total_size_bytes: total, platform, updated_at: new Date().toISOString() }).eq('id', app.id);
     if (meta.error) throw new Error(`تحديث حجم التطبيق: ${friendlyError(meta.error, meta.error.message)}`);
 
-    progress.update(82, 'رفع الصورة الاختيارية');
     if (summary.icon) {
+      progress.update(83, 'رفع الصورة الاختيارية');
       try {
-        const iconUrl = await uploadIcon(summary.icon, app.id, (local, label) => progress.update(82 + Math.round(local * 0.1), label));
-        const iconUpdate = await supabase.from('apps').update({ icon_url: iconUrl, updated_at: new Date().toISOString() }).eq('id', app.id);
+        const iconResult = await uploadIcon(summary.icon, app.id, (local, label) => progress.update(83 + Math.round(local * 0.09), label));
+        createdPaths.push({ bucket: 'app-icons', path: iconResult.path });
+        const iconUpdate = await supabase.from('apps').update({ icon_url: iconResult.url, icon_storage_path: iconResult.path, updated_at: new Date().toISOString() }).eq('id', app.id);
         if (iconUpdate.error) throw iconUpdate.error;
       } catch (error) {
-        console.warn('optional icon upload failed', error);
         warning = 'تم رفع البرنامج بنجاح، لكن الصورة الاختيارية لم تُرفع.';
+        console.warn('optional icon upload failed', error);
       }
     }
 
-    progress.update(94, 'تحديث لوحة التحكم');
+    progress.update(95, 'تحديث المتجر ولوحة التحكم');
     await renderDashboard();
     form.reset();
     resetUploadFields();
@@ -1031,15 +1068,19 @@ async function createAppRecord(form) {
     console.error('createAppRecord', error);
     if (app?.id) {
       try {
-        await supabase.storage.from('app-files').remove(createdPaths);
+        const filePaths = createdPaths.filter((item) => typeof item === 'string');
+        if (filePaths.length) await supabase.storage.from('app-files').remove(filePaths);
+        const iconPaths = createdPaths.filter((item) => item?.bucket === 'app-icons').map((item) => item.path);
+        if (iconPaths.length) await supabase.storage.from('app-icons').remove(iconPaths);
         await supabase.from('app_files').delete().eq('app_id', app.id);
         await supabase.from('apps').delete().eq('id', app.id);
       } catch (cleanupError) {
         console.warn('cleanup failed', cleanupError);
       }
     }
-    progress.fail(friendlyError(error, 'فشل رفع التطبيق.'));
-    toast(friendlyError(error, 'فشل رفع التطبيق.'), 'error');
+    const message = friendlyError(error, 'فشل رفع التطبيق.');
+    progress.fail(message);
+    toast(message, 'error');
   } finally {
     form.dataset.busy = '0';
     if (button) { button.disabled = false; button.textContent = originalButton; }
@@ -1050,10 +1091,19 @@ async function renderDashboard() {
   await loadApps(false);
   setText('totalApps', apps.length);
 
-  const usersResult = await supabase.from('profiles').select('*', { count: 'exact', head: true });
-  const adminsResult = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'admin');
-  setText('totalUsers', usersResult.count ?? 0);
-  setText('totalAdmins', adminsResult.count ?? 0);
+  const usersResult = await withTimeout(
+    supabase.from('profiles').select('id,name,email,role,created_at').order('created_at', { ascending: false }),
+    12000,
+    'انتهت مهلة تحميل المستخدمين.'
+  );
+  const users = usersResult.data || [];
+  if (usersResult.error) {
+    setText('totalUsers', '—');
+    setText('totalAdmins', '—');
+  } else {
+    setText('totalUsers', users.length);
+    setText('totalAdmins', users.filter((user) => String(user.role) === 'admin').length);
+  }
 
   const box = document.getElementById('adminAppsList');
   if (box) {
@@ -1067,7 +1117,7 @@ async function renderDashboard() {
 async function renderUsers() {
   const box = document.getElementById('usersList');
   if (!box) return;
-  const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
+  const { data, error } = await supabase.from('profiles').select('id,name,email,role,created_at').order('created_at', { ascending: false });
   if (error) {
     box.innerHTML = `<div class="empty-state">${escapeHTML(friendlyError(error))}</div>`;
     return;
@@ -1113,17 +1163,16 @@ async function addAdmin(event) {
 }
 
 async function deleteStorageFiles(app) {
-  const paths = (app?.app_files || []).map((file) => file.storage_path).filter(Boolean);
-  if (app?.icon_url) {
-    try {
-      const url = new URL(app.icon_url);
-      const prefix = '/storage/v1/object/public/app-files/';
-      if (url.pathname.includes(prefix)) paths.push(decodeURIComponent(url.pathname.split(prefix)[1]));
-    } catch (_) { /* ignore malformed legacy icon URL */ }
+  const appPaths = (app?.app_files || []).map((file) => file.storage_path).filter(Boolean);
+  if (appPaths.length) {
+    const { error } = await supabase.storage.from('app-files').remove(appPaths);
+    if (error) console.warn('deleteStorageFiles(app-files)', error);
   }
-  if (!paths.length) return;
-  const { error } = await supabase.storage.from('app-files').remove(paths);
-  if (error) console.warn('deleteStorageFiles', error);
+  const iconRef = legacyIconRef(app);
+  if (iconRef) {
+    const { error } = await supabase.storage.from(iconRef.bucket).remove([iconRef.path]);
+    if (error) console.warn(`deleteStorageFiles(${iconRef.bucket})`, error);
+  }
 }
 
 async function deleteApp(id) {
@@ -1186,7 +1235,7 @@ async function updateApp(event) {
   const id = modal?.dataset.appId;
   const app = apps.find((item) => item.id === id);
   if (!app || event.target.dataset.busy === '1') return;
-  const oldAppSnapshot = { name: app.name, description: app.description, version: app.version, category: app.category, category_name: app.category_name, icon_text: app.icon_text, icon_url: app.icon_url, download_url: app.download_url, changelog: app.changelog || '', total_size_bytes: app.total_size_bytes || 0, platform: app.platform };
+  const oldAppSnapshot = { name: app.name, description: app.description, version: app.version, category: app.category, category_name: app.category_name, icon_text: app.icon_text, icon_url: app.icon_url, icon_storage_path: app.icon_storage_path || legacyIconPath(app), download_url: app.download_url, changelog: app.changelog || '', total_size_bytes: app.total_size_bytes || 0, platform: app.platform };
   const oldFileSnapshot = (app.app_files || []).map((file) => ({ ...file }));
   const newUploadedPaths = [];
   const obsoleteStoragePaths = [];
@@ -1268,28 +1317,23 @@ async function updateApp(event) {
     let warning = null;
     progress.update(76, 'تحديث الصورة الاختيارية');
     if (icon) {
-      let iconPath = null;
+      let iconResult = null;
       try {
-        const oldIconPath = app.icon_url ? (() => { try { const u = new URL(app.icon_url); const prefix = '/storage/v1/object/public/app-files/'; return u.pathname.includes(prefix) ? decodeURIComponent(u.pathname.split(prefix)[1]) : null; } catch (_) { return null; } })() : null;
-        const iconUrl = await uploadIcon(icon, id, (local, label) => progress.update(76 + Math.round(local * 0.12), label));
-        iconPath = (() => { try { const u = new URL(iconUrl); const prefix = '/storage/v1/object/public/app-files/'; return u.pathname.includes(prefix) ? decodeURIComponent(u.pathname.split(prefix)[1]) : null; } catch (_) { return null; } })();
-        if (iconPath) newUploadedPaths.push(iconPath);
-        const iconUpdate = await supabase.from('apps').update({ icon_url: iconUrl, updated_at: new Date().toISOString() }).eq('id', id);
+        iconResult = await uploadIcon(icon, id, (local, label) => progress.update(76 + Math.round(local * 0.12), label));
+        newUploadedPaths.push({ bucket: 'app-icons', path: iconResult.path });
+        const oldIconRef = legacyIconRef(app);
+        const iconUpdate = await supabase.from('apps').update({ icon_url: iconResult.url, icon_storage_path: iconResult.path, updated_at: new Date().toISOString() }).eq('id', id);
         if (iconUpdate.error) throw iconUpdate.error;
-        if (oldIconPath && oldIconPath !== iconPath) obsoleteStoragePaths.push(oldIconPath);
+        if (oldIconRef && oldIconRef.path !== iconResult.path) obsoleteStoragePaths.push({ bucket: oldIconRef.bucket, path: oldIconRef.path });
       } catch (error) {
-        if (iconPath) await supabase.storage.from('app-files').remove([iconPath]);
+        if (iconResult?.path) await supabase.storage.from('app-icons').remove([iconResult.path]);
         console.warn('optional icon update failed', error);
         warning = 'تم تحديث البرنامج، لكن الصورة الاختيارية لم تُرفع.';
       }
-    } else if (removeIcon && app.icon_url) {
-      try {
-        const u = new URL(app.icon_url);
-        const prefix = '/storage/v1/object/public/app-files/';
-        const oldIconPath = u.pathname.includes(prefix) ? decodeURIComponent(u.pathname.split(prefix)[1]) : null;
-        if (oldIconPath) obsoleteStoragePaths.push(oldIconPath);
-      } catch (_) {}
-      const iconUpdate = await supabase.from('apps').update({ icon_url: null, updated_at: new Date().toISOString() }).eq('id', id);
+    } else if (removeIcon && (app.icon_url || app.icon_storage_path)) {
+      const oldIconRef = legacyIconRef(app);
+      if (oldIconRef) obsoleteStoragePaths.push({ bucket: oldIconRef.bucket, path: oldIconRef.path });
+      const iconUpdate = await supabase.from('apps').update({ icon_url: null, icon_storage_path: null, updated_at: new Date().toISOString() }).eq('id', id);
       if (iconUpdate.error) throw iconUpdate.error;
     }
 
@@ -1298,17 +1342,27 @@ async function updateApp(event) {
     form.reset();
     await renderDashboard();
     if (obsoleteStoragePaths.length) {
-      const uniqueObsolete = [...new Set(obsoleteStoragePaths)];
-      const cleanup = await supabase.storage.from('app-files').remove(uniqueObsolete);
-      if (cleanup.error) warning = warning || 'تم تحديث التطبيق، لكن بعض الملفات القديمة لم يتم حذفها من التخزين.';
+      const filePaths = [...new Set(obsoleteStoragePaths.filter((item) => typeof item === 'string'))];
+      if (filePaths.length) {
+        const cleanup = await supabase.storage.from('app-files').remove(filePaths);
+        if (cleanup.error) warning = warning || 'تم تحديث التطبيق، لكن الملف القديم لم يتم حذفه.';
+      }
+      for (const bucket of ['app-files', 'app-icons']) {
+        const paths = [...new Set(obsoleteStoragePaths.filter((item) => item?.bucket === bucket).map((item) => item.path))];
+        if (!paths.length) continue;
+        const cleanup = await supabase.storage.from(bucket).remove(paths);
+        if (cleanup.error) warning = warning || (bucket === 'app-icons' ? 'تم تحديث التطبيق، لكن الصورة القديمة لم يتم حذفها.' : 'تم تحديث التطبيق، لكن الملف القديم لم يتم حذفه.');
+      }
     }
     progress.done('تم تحديث التطبيق بنجاح');
     toast(warning || 'تم تحديث التطبيق والملفات بنجاح.');
   } catch (error) {
     console.error('updateApp', error);
     try {
-      const createdOnly = newUploadedPaths.filter((path) => !(oldFileSnapshot || []).some((row) => row.storage_path === path));
+      const createdOnly = newUploadedPaths.filter((item) => typeof item === 'string' && !(oldFileSnapshot || []).some((row) => row.storage_path === item));
+      const createdIcons = newUploadedPaths.filter((item) => item?.bucket === 'app-icons').map((item) => item.path);
       if (createdOnly.length) await supabase.storage.from('app-files').remove(createdOnly);
+      if (createdIcons.length) await supabase.storage.from('app-icons').remove(createdIcons);
       await supabase.from('app_files').delete().eq('app_id', id);
       for (const oldFile of oldFileSnapshot) {
         await supabase.from('app_files').insert(oldFile);
@@ -1415,7 +1469,10 @@ function setupUploadPreviews() {
       if (key === 'icon') {
         const preview = form.querySelector('[data-main-icon-preview]');
         if (preview) {
-          preview.innerHTML = `<img src="${URL.createObjectURL(file)}" alt="معاينة">`;
+          if (preview.dataset.objectUrl) URL.revokeObjectURL(preview.dataset.objectUrl);
+          const previewUrl = URL.createObjectURL(file);
+          preview.dataset.objectUrl = previewUrl;
+          preview.innerHTML = `<img src="${previewUrl}" alt="معاينة">`;
           preview.classList.add('has-image');
         }
       }
@@ -1461,7 +1518,10 @@ function setupEditUploadPreviews() {
           if (preview) {
             preview.classList.add('has-image');
             preview.classList.remove('auto-initials');
-            preview.innerHTML = `<img src="${URL.createObjectURL(file)}" alt="معاينة">`;
+            if (preview.dataset.objectUrl) URL.revokeObjectURL(preview.dataset.objectUrl);
+          const previewUrl = URL.createObjectURL(file);
+          preview.dataset.objectUrl = previewUrl;
+          preview.innerHTML = `<img src="${previewUrl}" alt="معاينة">`;
           }
         }
       } catch (error) {
@@ -1522,12 +1582,12 @@ async function setupDashboard() {
   document.getElementById('refreshDashboardBtn')?.addEventListener('click', async (event) => {
     const button = event.currentTarget;
     button.disabled = true;
-    button.classList.add('spinning');
+    button.setAttribute('aria-busy', 'true');
     try {
       await renderDashboard();
       toast('تم تحديث لوحة التحكم.');
     } finally {
-      button.classList.remove('spinning');
+      button.removeAttribute('aria-busy');
       button.disabled = false;
     }
   });
@@ -1615,15 +1675,11 @@ function initRealtimeRefresh() {
 
 async function boot() {
   setupNavigationEffects();
-  ensurePageLoader();
   setupUploadPreviews();
   setupEditUploadPreviews();
 
   const configReady = await requireConfig();
-  if (!configReady) {
-    hidePageLoader();
-    return;
-  }
+  if (!configReady) return;
 
   // Bind page-specific forms BEFORE session/network work so the login/register
   // buttons are never blocked by a slow Supabase session request.

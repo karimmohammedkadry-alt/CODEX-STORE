@@ -4,7 +4,7 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>لوحة التحكم | CODEX</title><link rel="stylesheet" href="style.css">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet">
 </head>
 <body class="dashboard-page">
 <header class="dashboard-navbar">
@@ -12,7 +12,7 @@
   <div class="dashboard-user"><div><strong id="adminName">Admin</strong><small id="adminEmail">admin</small></div><a class="mini-btn" href="account.html">حسابي</a><button id="logoutBtn" class="logout-btn" type="button" data-logout>تسجيل الخروج</button></div>
 </header>
 <main class="dashboard-container">
-<section class="dashboard-heading"><div><span>CONTROL PANEL</span><h1>لوحة التحكم</h1><p>إدارة التطبيقات والمستخدمين وحسابات الأدمن من مكان واحد.</p></div><a href="index.html" class="view-store-btn">فتح المتجر ↗</a></section>
+<section class="dashboard-heading"><div><span>CONTROL PANEL</span><h1>لوحة التحكم</h1><p>مكان واحد لإدارة التطبيقات والملفات والمستخدمين بسرعة وبدون خطوات زائدة.</p></div><a href="index.html" class="view-store-btn">فتح المتجر ↗</a></section>
 <section class="dashboard-stats">
   <div class="dashboard-stat"><span>📦</span><div><small>التطبيقات</small><strong id="totalApps">0</strong></div></div>
   <div class="dashboard-stat"><span>👥</span><div><small>المستخدمون</small><strong id="totalUsers">0</strong></div></div>
@@ -30,11 +30,11 @@
 <div class="form-field"><label>أيقونة التطبيق <small class="optional-badge">اختياري</small></label><label class="file-picker image-picker"><input id="newAppIconFile" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"><span>اختيار صورة من الجهاز</span><strong data-file-label="icon">PNG / JPG / WEBP</strong><small data-file-size="icon"></small></label></div>
 <div class="form-field wide"><div class="upload-summary"><div><span>الحجم الإجمالي</span><strong id="newAppSize">سيتم حسابه تلقائيًا</strong></div><div><span>النظام</span><strong id="newAppPlatform">سيتم تحديده تلقائيًا</strong></div></div></div>
 <div class="form-field wide"><label>ملاحظات الإصدار <small class="optional-badge">اختياري</small></label><textarea id="newAppChangelog" rows="3" placeholder="ما الجديد في هذا الإصدار؟"></textarea></div>
-<div class="form-field wide"><small class="form-help">ارفع EXE أو APK أو الاثنين معًا. صورة الأيقونة اختيارية. الملفات الكبيرة تستخدم رفعًا متدرجًا مع نسبة تقدم.</small></div>
-<button type="submit" class="add-app-btn">+ رفع التطبيق وإضافته</button>
+<div class="form-field wide"><small class="form-help">ارفع EXE أو APK أو الاثنين. الصورة اختيارية. الملفات الكبيرة تستخدم رفعًا قابلًا للاستئناف مع نسبة تقدم.</small></div>
+<div class="form-actions wide"><button type="submit" class="add-app-btn">رفع التطبيق وإضافته</button><small>يتم التحقق من الملف والحجم والنظام قبل الحفظ.</small></div>
 </form>
 </section>
-<section class="dashboard-panel"><div class="panel-header"><div><span>APPLICATIONS</span><h2>إدارة التطبيقات</h2></div><div class="panel-header-actions"><small>تحديث الملفات والصورة اختياري. التغييرات تظهر في المتجر مباشرة.</small><button id="refreshDashboardBtn" class="mini-btn refresh-btn" type="button">↻ تحديث</button></div></div><div id="adminAppsList" class="admin-apps-list"></div></section>
+<section class="dashboard-panel"><div class="panel-header"><div><span>APPLICATIONS</span><h2>إدارة التطبيقات</h2></div><div class="panel-header-actions"><small>التحديثات تظهر بعد الحفظ مباشرة. الصورة اختيارية ولا توقف رفع البرنامج.</small><button id="refreshDashboardBtn" class="mini-btn refresh-btn" type="button">↻ تحديث</button></div></div><div id="adminAppsList" class="admin-apps-list"></div></section>
 <section class="dashboard-panel"><div class="panel-header"><div><span>ACCOUNT MANAGEMENT</span><h2>إضافة حساب</h2><small>يمكن للأدمن إنشاء مستخدم عادي أو Admin.</small></div></div>
 <form id="addAdminForm" class="add-app-form admin-form">
 <div class="form-field"><label>اسم الأدمن</label><input id="adminNameInput" required></div><div class="form-field"><label>الإيميل</label><input id="adminEmailInput" type="email" required></div><div class="form-field"><label>كلمة المرور</label><input id="adminPasswordInput" type="password" minlength="6" required></div><div class="form-field"><label>تأكيد كلمة المرور</label><input id="adminPasswordConfirm" type="password" minlength="6" required></div><div class="form-field"><label>نوع الحساب</label><select id="adminRoleInput"><option value="user">مستخدم</option><option value="admin">Admin</option></select></div><button class="add-app-btn" type="submit">+ إضافة حساب</button>

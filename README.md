@@ -1,6 +1,6 @@
 # CODEX App Store 3.0 — Supabase + Vercel + GitHub
 
-نسخة V11 المراجعة من CODEX App Store. المتجر يعمل بواجهة متعددة الصفحات مع Supabase Auth + PostgreSQL + Storage.
+نسخة V12 المراجعة من CODEX App Store. المتجر يعمل بواجهة متعددة الصفحات مع Supabase Auth + PostgreSQL + Storage.
 
 ## الوظائف الأساسية
 
@@ -13,7 +13,7 @@
 - إضافة التطبيق من EXE أو APK أو الاثنين.
 - صورة التطبيق اختيارية بالكامل.
 - حساب الحجم والنظام تلقائيًا.
-- رفع كبير قابل للاستئناف باستخدام TUS للملفات الأكبر من 6MB.
+- رفع كبير قابل للاستئناف باستخدام TUS للملفات الأكبر من 6MB، مع استخدام hostname الخاص بالتخزين.
 - تعديل الملفات واستبدالها أو إزالتها، وتغيير/إزالة الصورة.
 - حذف التطبيق مع تنظيف Storage.
 - إنشاء مستخدم عادي أو Admin من لوحة التحكم.
@@ -93,3 +93,12 @@ npm run build
 ## ملاحظات رفع الملفات
 
 الرفع العادي مناسب للملفات الصغيرة. النسخة تستخدم `tus-js-client` للملفات التي تتجاوز 6MB، مع progress وretry، لأن Supabase توصي بالرفع المتدرج لهذه الملفات.
+
+
+## V12 Performance
+
+- لا يوجد Fullscreen loader مع كل تنقل أو كل ضغطة زر.
+- التفاعل البصري محدود بالـhover/focus فقط للحفاظ على السرعة.
+- Roboto هو الخط الأساسي.
+- EXE/APK في bucket `app-files` والصور في bucket `app-icons` لتقليل تعارضات Storage.
+- ملفات البرامج الأكبر من 6MB تستخدم TUS resumable uploads مع progress/retry حسب توصية Supabase.

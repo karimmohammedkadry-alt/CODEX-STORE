@@ -47,7 +47,7 @@ html {
 
 body {
 
-    font-family: "Cairo", sans-serif;
+    font-family: "Roboto", Arial, sans-serif;
 
     background: var(--bg);
 
@@ -3854,3 +3854,99 @@ button:disabled { cursor: not-allowed; opacity: .65; transform: none !important;
 .check-option{display:flex;align-items:center;gap:8px;margin-top:8px;color:#666;font-size:11px;cursor:pointer}.check-option input{width:15px;height:15px;accent-color:#111}
 .favorites-list{display:grid;gap:10px}.favorite-item{display:flex;align-items:center;gap:12px;padding:12px;border:1px solid #ececec;border-radius:14px;transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease}.favorite-item:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(0,0,0,.06);border-color:#ddd}.favorite-icon{width:52px;height:52px;flex:0 0 52px;border-radius:14px;overflow:hidden;display:grid;place-items:center;background:#111;color:#fff;font-weight:800}.favorite-item>div:nth-child(2){flex:1;min-width:0}.favorite-item strong{display:block;font-size:13px}.favorite-item small{display:block;color:#8a8a8a;margin-top:4px;font-size:10px}.favorite-actions{display:flex;gap:7px;flex-wrap:wrap}.changelog-box{margin-top:18px;padding:15px 16px;border:1px solid #ececec;border-radius:14px;background:#fafafa;color:#444;line-height:1.8}.changelog-box strong{display:block;color:#111;margin-bottom:5px}.changelog-box p{margin:0;white-space:normal}
 @media (max-width:700px){.favorite-item{align-items:flex-start}.favorite-actions{width:100%}.favorite-actions .mini-btn{flex:1}.favorite-item{flex-wrap:wrap}}
+
+
+/* =====================================================
+   CODEX V12 — FAST, CALM UI
+   No per-click animations. Roboto. Lightweight navbar.
+===================================================== */
+:root{
+  --codex-radius:14px;
+  --codex-shadow:0 8px 28px rgba(0,0,0,.055);
+}
+html{scroll-behavior:auto}
+body{font-family:"Roboto",Arial,sans-serif;background:#fff;color:#151515}
+
+/* Remove expensive / noisy interaction effects. */
+.reveal-in,.codex-tap{animation:none!important}
+button,a,.file-picker,.app-card,.release-card,.admin-app-item,.user-item,.dashboard-stat,.dashboard-panel,.account-card,.feature-card{
+  transition:background-color .14s ease,color .14s ease,border-color .14s ease,box-shadow .14s ease,opacity .14s ease;
+}
+button:hover,a:hover,.file-picker:hover,.app-card:hover,.release-card:hover,.admin-app-item:hover,.user-item:hover,.dashboard-stat:hover,.dashboard-panel:hover,.account-card:hover,.feature-card:hover{
+  transform:none!important;
+}
+
+/* Never show the old full-page navigation loader. */
+.codex-page-loader{display:none!important}
+
+/* Navbar */
+.navbar{
+  min-height:68px;
+  padding:10px clamp(16px,4vw,64px);
+  gap:18px;
+  background:#fff;
+  border-bottom:1px solid #ececec;
+  box-shadow:0 4px 18px rgba(0,0,0,.035);
+  backdrop-filter:none;
+}
+.logo{gap:10px}
+.logo-image-wrapper{width:40px;height:40px;border-radius:12px}
+.logo-text{font-family:"Roboto",Arial,sans-serif;font-weight:900;letter-spacing:.2px}
+.nav-links{padding:3px;background:#f7f7f7;border:1px solid #ededed;border-radius:12px;gap:2px}
+.nav-links a{padding:8px 12px;border-radius:9px;font-size:12px;font-weight:700}
+.nav-links a:hover{background:#fff;box-shadow:none}
+.nav-links a.active{background:#151515;color:#fff;box-shadow:none}
+.login-btn,.secondary-btn,.view-store-btn,.mini-btn{border-radius:10px!important}
+.login-btn{padding:9px 14px}
+
+/* Dashboard */
+.dashboard-page{background:#f6f7f8}
+.dashboard-navbar{
+  min-height:64px;padding:10px clamp(16px,3vw,42px);
+  background:#fff;border-bottom:1px solid #e8e8e8;box-shadow:0 3px 16px rgba(0,0,0,.035);
+  backdrop-filter:none;
+}
+.dashboard-brand{gap:10px}
+.dashboard-logo{width:38px;height:38px;border-radius:11px;overflow:hidden}
+.dashboard-user{gap:10px}
+.dashboard-container{max-width:1240px;padding:28px 22px 60px}
+.dashboard-heading{margin-bottom:18px}
+.dashboard-heading h1{font-family:"Roboto",Arial,sans-serif;font-weight:900;letter-spacing:-.4px}
+.dashboard-stats{gap:12px}
+.dashboard-stat{background:#fff;border:1px solid #e7e7e7;border-radius:16px;box-shadow:none;padding:16px}
+.dashboard-panel{background:#fff;border:1px solid #e7e7e7;border-radius:16px;box-shadow:none;padding:18px}
+.dashboard-panel + .dashboard-panel{margin-top:16px}
+.panel-header{gap:14px}
+.panel-header-actions{gap:8px}
+
+/* Better form rhythm */
+.add-app-form{gap:14px}
+.form-field{gap:7px}
+.form-field input,.form-field select,.form-field textarea{border-color:#ddd;border-radius:10px;background:#fff;box-shadow:none}
+.form-field input:focus,.form-field select:focus,.form-field textarea:focus{border-color:#111;box-shadow:0 0 0 3px rgba(17,17,17,.06)}
+.file-picker{min-height:104px;border:1px dashed #d7d7d7;background:#fafafa;border-radius:14px;box-shadow:none}
+.file-picker:hover{background:#f7f7f7;border-color:#aaa;box-shadow:none}
+.file-picker .file-picker-icon{background:#151515}
+.form-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.form-actions.wide{grid-column:1 / -1}
+.form-actions small{color:#777;font-size:11px}
+.add-app-btn{box-shadow:none!important}
+
+/* Compact operation modal: only used for real operations such as uploads. */
+.codex-operation-progress{background:rgba(15,15,15,.34);backdrop-filter:none;transition:opacity .14s ease}
+.cop-card{border-radius:18px;box-shadow:0 18px 55px rgba(0,0,0,.18);animation:none}
+.cop-orbit{animation:none;border-top-color:#111}
+.cop-bar i{transition:width .16s linear}
+
+/* Download choices */
+.file-download-option{transition:background-color .12s ease,border-color .12s ease;color:#111}
+.file-download-option:hover{box-shadow:none;transform:none!important}
+
+/* Less motion / less compositor work everywhere. */
+*{will-change:auto}
+
+@media(max-width:850px){
+  .navbar{padding:9px 16px}
+  .nav-links{display:none}
+  .dashboard-heading{gap:12px}
+}
