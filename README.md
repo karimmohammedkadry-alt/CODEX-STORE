@@ -102,3 +102,28 @@ npm run build
 - Roboto هو الخط الأساسي.
 - EXE/APK في bucket `app-files` والصور في bucket `app-icons` لتقليل تعارضات Storage.
 - ملفات البرامج الأكبر من 6MB تستخدم TUS resumable uploads مع progress/retry حسب توصية Supabase.
+
+
+### Upload / download behavior (V13)
+- Files larger than 6MB use Supabase TUS resumable upload directly on the storage hostname.
+- The app never performs a second full upload as a fallback, which avoids duplicate transfer time.
+- `app_files` is saved through `save_app_file`, which handles an existing `app_platform` enum safely.
+- Image upload is optional and remains separate from EXE/APK storage.
+- Download counts are recorded from real download-start requests in `download_events`, deduplicated per visitor/file/day; the old increment-only RPC is disabled.
+- A Supabase Free project currently has a 50MB global file-size limit; a larger app binary requires a plan/Storage setup that permits a larger limit or external object storage.
+
+
+## Large EXE/APK uploads
+
+Files above 6MB use Supabase TUS resumable uploads directly through the storage-specific hostname. The client resumes a prior TUS upload when the same upload fingerprint is available and shows real progress, transfer speed, and ETA. Standard upload is used only for small files.
+
+For a 500MB file, the Supabase project itself must allow at least that global file size. On the Free plan the global maximum is 50MB; paid plans can be configured much higher. Check Storage Settings before testing a 500MB upload.
+
+
+## 500MB upload setup
+
+The dashboard uses Supabase TUS resumable uploads for files above 6MB. The upload goes directly to the storage-specific hostname and uses 6MB chunks, automatic retries, resumable fingerprints, real progress, transfer speed and ETA.
+
+For a 500MB EXE/APK, the Supabase project must allow at least 500MB at the global Storage file-size limit. The current Supabase Free plan has a 50MB maximum per file; paid plans can be configured up to 500GB. See Storage Settings in the Supabase dashboard.
+
+The app never falls back from a large TUS upload to a second multipart upload, so a failed large upload is not restarted through another path automatically.

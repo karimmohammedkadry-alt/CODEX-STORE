@@ -30,8 +30,8 @@
 <div class="form-field"><label>أيقونة التطبيق <small class="optional-badge">اختياري</small></label><label class="file-picker image-picker"><input id="newAppIconFile" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"><span>اختيار صورة من الجهاز</span><strong data-file-label="icon">PNG / JPG / WEBP</strong><small data-file-size="icon"></small></label></div>
 <div class="form-field wide"><div class="upload-summary"><div><span>الحجم الإجمالي</span><strong id="newAppSize">سيتم حسابه تلقائيًا</strong></div><div><span>النظام</span><strong id="newAppPlatform">سيتم تحديده تلقائيًا</strong></div></div></div>
 <div class="form-field wide"><label>ملاحظات الإصدار <small class="optional-badge">اختياري</small></label><textarea id="newAppChangelog" rows="3" placeholder="ما الجديد في هذا الإصدار؟"></textarea></div>
-<div class="form-field wide"><small class="form-help">ارفع EXE أو APK أو الاثنين. الصورة اختيارية. الملفات الكبيرة تستخدم رفعًا قابلًا للاستئناف مع نسبة تقدم.</small></div>
-<div class="form-actions wide"><button type="submit" class="add-app-btn">رفع التطبيق وإضافته</button><small>يتم التحقق من الملف والحجم والنظام قبل الحفظ.</small></div>
+<div class="form-field wide"><small class="form-help">ارفع EXE أو APK أو الاثنين. الصورة اختيارية. الملفات الكبيرة تستخدم TUS مع استئناف تلقائي، سرعة، ووقت متبقٍ.</small></div>
+<div class="form-actions wide"><button type="submit" class="add-app-btn">رفع التطبيق وإضافته</button><small>يتم حفظ البرنامج في Storage أولًا ثم تسجيله في قاعدة البيانات بعد اكتمال الرفع.</small></div>
 </form>
 </section>
 <section class="dashboard-panel"><div class="panel-header"><div><span>APPLICATIONS</span><h2>إدارة التطبيقات</h2></div><div class="panel-header-actions"><small>التحديثات تظهر بعد الحفظ مباشرة. الصورة اختيارية ولا توقف رفع البرنامج.</small><button id="refreshDashboardBtn" class="mini-btn refresh-btn" type="button">↻ تحديث</button></div></div><div id="adminAppsList" class="admin-apps-list"></div></section>

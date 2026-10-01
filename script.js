@@ -47,7 +47,7 @@ function friendlyError(error, fallback = 'حدث خطأ غير متوقع.') {
   if (lower.includes('row-level security') || lower.includes('rls')) return 'تم رفض العملية بسبب صلاحيات قاعدة البيانات (RLS). تأكد أن الحساب Admin وأن سياسات Supabase مفعلة.';
   if (lower.includes('bucket') && lower.includes('not found')) return 'مجلد التخزين app-files غير موجود في Supabase.';
   if (lower.includes('mime') || lower.includes('content type')) return 'Supabase رفض نوع الملف. تأكد أن Bucket يسمح برفع الملفات.';
-  if (lower.includes('payload too large') || lower.includes('too large') || lower.includes('413')) return 'حجم الملف كبير على طريقة الرفع الحالية.';
+  if (lower.includes('payload too large') || lower.includes('too large') || lower.includes('maximum allowed size') || lower.includes('file exceeds') || lower.includes('entity too large') || lower.includes('413')) return 'حجم الملف أكبر من الحد المسموح به في Storage لهذا المشروع. لملف 500MB ارفع Global file size limit في Supabase بما يكفي وتأكد أن خطة المشروع تسمح بالحجم.';
   if (lower.includes('failed to fetch') || lower.includes('network')) return 'تعذر الاتصال بـ Supabase. تحقق من الإنترنت وإعدادات المشروع.';
   return message;
 }
@@ -397,11 +397,33 @@ function shareApp(app) {
   );
 }
 
-async function recordDownload(appId) {
+function getVisitorId() {
+  const key = 'codex:download-visitor-id';
   try {
-    await supabase.rpc('increment_app_download', { p_app_id: appId });
+    let value = localStorage.getItem(key);
+    if (!value) {
+      value = safeRandomId();
+      localStorage.setItem(key, value);
+    }
+    return value;
+  } catch (_) {
+    return safeRandomId();
+  }
+}
+
+async function recordDownload(appId, fileKey = 'download') {
+  try {
+    const { data, error } = await supabase.rpc('register_app_download', {
+      p_app_id: appId,
+      p_file_key: String(fileKey || 'download'),
+      p_visitor_id: getVisitorId(),
+    });
+    if (error) throw error;
+    return Number(data || 0);
   } catch (error) {
-    console.warn('increment_app_download', error);
+    // A failed counter must never block the real download.
+    console.warn('register_app_download', error);
+    return null;
   }
 }
 
@@ -458,7 +480,7 @@ async function loadAppDetails() {
   if (options) {
     options.innerHTML = files.map((file) => buildDownloadLink(file)).join('');
     options.classList.toggle('open', files.length > 0);
-    options.querySelectorAll('[data-download-app]').forEach((link) => link.addEventListener('click', () => { void recordDownload(id); }));
+    options.querySelectorAll('[data-download-app]').forEach((link) => link.addEventListener('click', () => { const key = link.getAttribute('href')?.includes('apk') ? 'android' : 'windows'; void recordDownload(id, key); }));
   }
 
   const main = getFile(app, 'windows') || getFile(app, 'android');
@@ -485,14 +507,14 @@ async function loadAppDetails() {
         downloadBtn.disabled = true;
         downloadBtn.textContent = 'جاري التحميل…';
         setTimeout(() => { downloadBtn.disabled = false; downloadBtn.textContent = oldText; }, 900);
-        void recordDownload(app.id);
+        void recordDownload(app.id, main.platform);
         toast(`جاري تجهيز تحميل ${main.file_name}.`, 'info');
       };
     } else if (app.download_url) {
       downloadBtn.disabled = false;
       downloadBtn.onclick = () => {
         window.open(app.download_url, '_blank', 'noopener,noreferrer');
-        void recordDownload(app.id);
+        void recordDownload(app.id, 'external');
       };
     } else {
       downloadBtn.disabled = true;
@@ -813,44 +835,135 @@ function safeRandomId() {
   try { return crypto.randomUUID(); } catch (_) { return `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`; }
 }
 
+function formatEta(seconds) {
+  const total = Math.max(0, Math.round(Number(seconds) || 0));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  if (hours) return `${hours}س ${minutes}د`;
+  if (minutes) return `${minutes}د ${secs}ث`;
+  return `${secs}ث`;
+}
+
+function safePathPart(value = '') {
+  const base = String(value || 'file')
+    .normalize('NFKC')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^[-.]+|[-.]+$/g, '')
+    .slice(0, 100);
+  return base || 'file';
+}
+
 async function resumableUpload(file, path, progress, label, bucket = 'app-files') {
   const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
   const token = sessionData?.session?.access_token;
-  if (sessionError || !token) throw new Error('انتهت جلسة الأدمن. سجّل الدخول مرة أخرى قبل رفع الملف.');
+  if (sessionError || !token) {
+    throw new Error('انتهت جلسة الأدمن. سجّل الدخول مرة أخرى قبل رفع الملف.');
+  }
 
   const projectRef = new URL(SUPABASE_URL).hostname.split('.')[0];
   const endpoint = `https://${projectRef}.storage.supabase.co/storage/v1/upload/resumable`;
-  const chunkSize = 6 * 1024 * 1024;
+  const chunkSize = 6 * 1024 * 1024; // Supabase TUS requires 6MB chunks for now.
+  const totalBytes = Number(file.size) || 0;
 
-  await new Promise((resolve, reject) => {
-    const upload = new TusUpload(file, {
-      endpoint,
-      retryDelays: [0, 1000, 3000, 5000, 10000, 15000],
-      chunkSize,
-      uploadDataDuringCreation: true,
-      removeFingerprintOnSuccess: true,
-      headers: {
-        authorization: `Bearer ${token}`,
-        apikey: SUPABASE_KEY,
-        'x-upsert': 'true',
-      },
-      metadata: {
-        bucketName: bucket,
-        objectName: path,
-        contentType: getMimeType(file),
-        cacheControl: '3600',
-      },
-      onError: (error) => reject(new Error(`${label}: ${error?.message || 'فشل الرفع المتدرج.'}`)),
-      onProgress: (bytesUploaded, bytesTotal) => {
-        const percent = bytesTotal ? Math.round((bytesUploaded / bytesTotal) * 100) : 0;
-        progress?.(percent, `${label} — ${percent}%`);
-      },
-      onSuccess: () => resolve(),
+  const formatTransfer = (bytes) => {
+    if (!bytes) return '0 B';
+    return formatFileSize(bytes);
+  };
+
+  const runUploadAttempt = async () => {
+    await new Promise((resolve, reject) => {
+      const startedAt = performance.now();
+      let lastBytes = 0;
+      let lastTime = startedAt;
+      let upload;
+
+      const finishError = (error) => {
+        const message = error?.message || 'فشل الرفع المتدرج.';
+        reject(new Error(`${label}: ${message}`));
+      };
+
+      upload = new TusUpload(file, {
+        endpoint,
+        retryDelays: [0, 1000, 3000, 5000, 10000, 20000],
+        chunkSize,
+        uploadDataDuringCreation: true,
+        storeFingerprintForResuming: true,
+        removeFingerprintOnSuccess: true,
+        fingerprint: () => Promise.resolve([
+          'codex-tus-v1',
+          bucket,
+          path,
+          file.name,
+          String(file.size),
+          String(file.lastModified || 0),
+        ].join(':')),
+        headers: {
+          authorization: `Bearer ${token}`,
+          apikey: SUPABASE_KEY,
+          'x-upsert': 'true',
+        },
+        metadata: {
+          bucketName: bucket,
+          objectName: path,
+          contentType: getMimeType(file),
+          cacheControl: '3600',
+        },
+        onError: finishError,
+        onProgress: (bytesUploaded, bytesTotal) => {
+          const now = performance.now();
+          const elapsed = Math.max((now - startedAt) / 1000, 0.001);
+          const deltaSeconds = Math.max((now - lastTime) / 1000, 0.001);
+          const deltaBytes = Math.max(bytesUploaded - lastBytes, 0);
+          const speed = deltaBytes > 0 ? deltaBytes / deltaSeconds : bytesUploaded / elapsed;
+          const percent = bytesTotal ? (bytesUploaded / bytesTotal) * 100 : 0;
+          const remaining = Math.max(bytesTotal - bytesUploaded, 0);
+          const etaSeconds = speed > 0 ? remaining / speed : 0;
+          const detail = `${formatTransfer(bytesUploaded)} / ${formatTransfer(bytesTotal)} · ${formatTransfer(speed)}/ث · ${etaSeconds > 0 ? `متبقي ${formatEta(etaSeconds)}` : 'جارٍ الحساب'}`;
+          progress?.(percent, `${label} — ${detail}`);
+          lastBytes = bytesUploaded;
+          lastTime = now;
+        },
+        onSuccess: () => {
+          progress?.(100, `${label} — اكتمل`);
+          resolve();
+        },
+      });
+
+      // Reuse an interrupted TUS session when one exists for the same file/path.
+      upload.findPreviousUploads()
+        .then((previousUploads) => {
+          if (previousUploads?.length) {
+            upload.resumeFromPreviousUpload(previousUploads[0]);
+          }
+          upload.start();
+        })
+        .catch(finishError);
     });
-    upload.start();
-  });
+  };
 
-  progress?.(100, `${label} — تم`);
+  // First attempt plus one fresh resume attempt in case the connection drops after
+  // TUS has created a resumable session. The client keeps the fingerprint locally.
+  try {
+    await runUploadAttempt();
+  } catch (firstError) {
+    const message = String(firstError?.message || firstError || '');
+    if (/50\s*mb|file size|too large|payload|413|limit/i.test(message)) {
+      throw new Error(`${label}: حجم الملف أكبر من الحد المسموح به في إعدادات مشروع Supabase. لملف 500MB يجب أن يكون المشروع على خطة تسمح بهذا الحجم وأن يكون Global file size limit مرفوعًا بما يكفي.`);
+    }
+    try {
+      progress?.(0, `${label} — محاولة استئناف الرفع…`);
+      await runUploadAttempt();
+    } catch (secondError) {
+      const secondMessage = String(secondError?.message || secondError || message);
+      if (/50\s*mb|file size|too large|payload|413|limit/i.test(secondMessage)) {
+        throw new Error(`${label}: حجم الملف أكبر من الحد المسموح به في إعدادات مشروع Supabase. لملف 500MB يجب أن يكون المشروع على خطة تسمح بهذا الحجم وأن يكون Global file size limit مرفوعًا بما يكفي.`);
+      }
+      throw secondError;
+    }
+  }
+
   return path;
 }
 
@@ -858,10 +971,11 @@ async function uploadStorageFile(file, path, progress, label = 'رفع المل�
   const kind = path.includes('/windows/') ? 'windows' : path.includes('/android/') ? 'android' : path.includes('/icons/') ? 'icon' : null;
   validateUpload(file, kind);
   const SIX_MB = 6 * 1024 * 1024;
-  progress?.(0, `${label} — بدء الرفع`);
+  progress?.(0, `${label} — تجهيز الرفع`);
 
-  // Large application files use TUS directly. This is the recommended path for uploads > 6MB.
-  if (file.size > SIX_MB) {
+  // Large files always use TUS directly. We do not fall back to a second
+  // multipart upload because that would restart a 500MB file from zero.
+  if (Number(file.size) > SIX_MB) {
     return resumableUpload(file, path, progress, label, bucket);
   }
 
@@ -875,15 +989,6 @@ async function uploadStorageFile(file, path, progress, label = 'رفع المل�
     progress?.(100, `${label} — تم`);
     return path;
   } catch (error) {
-    // A small file may still be rejected by a proxy/limit. One resumable retry avoids a false failure.
-    if (file.size > 1024 * 1024) {
-      try {
-        progress?.(5, `${label} — إعادة المحاولة بطريقة قابلة للاستئناف`);
-        return await resumableUpload(file, path, progress, label, bucket);
-      } catch (retryError) {
-        throw new Error(`${label}: ${friendlyError(retryError, retryError?.message || friendlyError(error, 'فشل رفع الملف.'))}`);
-      }
-    }
     throw new Error(`${label}: ${friendlyError(error, error?.message || 'فشل رفع الملف.')}`);
   }
 }
@@ -901,25 +1006,43 @@ async function saveAppFile(appId, platform, file, existing, progress) {
   if (!file) return existing || null;
   validateUpload(file, platform);
   const extension = file.name.split('.').pop().toLowerCase();
-  const path = `apps/${appId}/${platform}/${safeRandomId()}.${extension}`;
+  const pathPart = safePathPart(file.name.replace(/\.[^.]+$/, ''));
+  const fingerprintPart = `${file.size}-${file.lastModified || 0}`;
+  const path = `apps/${appId}/${platform}/${pathPart}-${fingerprintPart}.${extension}`;
 
-  await uploadStorageFile(file, path, progress, `رفع ${platform === 'windows' ? 'EXE' : 'APK'}`, 'app-files');
+  await uploadStorageFile(
+    file,
+    path,
+    progress,
+    `رفع ${platform === 'windows' ? 'EXE' : 'APK'}`,
+    'app-files',
+  );
 
-  const row = {
-    app_id: appId,
-    platform,
-    file_name: file.name,
-    storage_path: path,
-    mime_type: getMimeType(file),
-    size_bytes: file.size,
-  };
+  try {
+    const result = await withTimeout(
+      supabase.rpc('save_app_file', {
+        p_app_id: appId,
+        p_platform: platform,
+        p_file_name: file.name,
+        p_storage_path: path,
+        p_mime_type: getMimeType(file),
+        p_size_bytes: Number(file.size),
+      }),
+      15000,
+      'انتهت مهلة حفظ ملف التطبيق في قاعدة البيانات.',
+    );
 
-  const { data, error } = await supabase.from('app_files').upsert(row, { onConflict: 'app_id,platform' }).select().single();
-  if (error) {
+    if (result.error || !result.data) {
+      throw result.error || new Error('لم يتم حفظ ملف التطبيق في قاعدة البيانات.');
+    }
+
+    const row = Array.isArray(result.data) ? result.data[0] : result.data;
+    if (!row) throw new Error('تعذر قراءة سجل الملف بعد الحفظ.');
+    return row;
+  } catch (error) {
     await supabase.storage.from('app-files').remove([path]);
-    throw new Error(`تم رفع الملف لكن تعذر تسجيله في قاعدة البيانات: ${friendlyError(error, error.message)}`);
+    throw new Error(`تم رفع الملف لكن تعذر تسجيله في قاعدة البيانات: ${friendlyError(error, error?.message || 'خطأ في قاعدة البيانات')}`);
   }
-  return data;
 }
 
 function legacyIconRef(app) {
@@ -1021,16 +1144,20 @@ async function createAppRecord(form) {
     if (summary.exe) uploadTasks.push(['windows', summary.exe]);
     if (summary.apk) uploadTasks.push(['android', summary.apk]);
 
-    for (let index = 0; index < uploadTasks.length; index += 1) {
-      const [platform, file] = uploadTasks[index];
-      const start = 22 + index * (48 / uploadTasks.length);
-      const end = start + 36;
-      const row = await saveAppFile(app.id, platform, file, null, (local, label) => {
-        const value = Math.round(start + (local / 100) * (end - start));
-        progress.update(value, label);
-      });
-      createdPaths.push(row.storage_path);
-    }
+    const uploadResults = await Promise.all(
+      uploadTasks.map(async ([platform, file], index) => {
+        const start = 22 + index * (48 / uploadTasks.length);
+        const end = start + 36;
+        const row = await saveAppFile(app.id, platform, file, null, (local, label) => {
+          const value = Math.round(start + (local / 100) * (end - start));
+          progress.update(value, label);
+        });
+        // Record each successful upload immediately so a parallel failure
+        // can still be cleaned up in the outer catch block.
+        if (row?.storage_path) createdPaths.push(row.storage_path);
+        return row;
+      }),
+    );
 
     progress.update(73, 'تأكيد الملفات وحساب الحجم');
     const filesResult = await supabase.from('app_files').select('id,app_id,platform,file_name,storage_path,mime_type,size_bytes').eq('app_id', app.id);
@@ -1042,7 +1169,7 @@ async function createAppRecord(form) {
     const platform = files.some((file) => file.platform === 'windows') && files.some((file) => file.platform === 'android')
       ? 'Windows + Android'
       : files.some((file) => file.platform === 'android') ? 'Android' : 'Windows';
-    const meta = await supabase.from('apps').update({ total_size_bytes: total, platform, updated_at: new Date().toISOString() }).eq('id', app.id);
+    const meta = await supabase.from('apps').update({ total_size_bytes: total, updated_at: new Date().toISOString() }).eq('id', app.id);
     if (meta.error) throw new Error(`تحديث حجم التطبيق: ${friendlyError(meta.error, meta.error.message)}`);
 
     if (summary.icon) {
@@ -1311,7 +1438,7 @@ async function updateApp(event) {
     const files = filesResult.data || [];
     const total = files.reduce((sum, file) => sum + Number(file.size_bytes || 0), 0);
     const platform = files.length === 2 ? 'Windows + Android' : files[0]?.platform === 'android' ? 'Android' : files[0]?.platform === 'windows' ? 'Windows' : 'Windows';
-    const meta = await supabase.from('apps').update({ total_size_bytes: total, platform, updated_at: new Date().toISOString() }).eq('id', id);
+    const meta = await supabase.from('apps').update({ total_size_bytes: total, updated_at: new Date().toISOString() }).eq('id', id);
     if (meta.error) throw meta.error;
 
     let warning = null;
