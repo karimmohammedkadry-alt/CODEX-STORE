@@ -870,16 +870,40 @@ function safePathPart(value = '') {
   return base || 'file';
 }
 
-async function resumableUpload(file, path, progress, label, bucket = 'app-files') {
-  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-  const token = sessionData?.session?.access_token;
-  if (sessionError || !token) {
-    throw new Error('انتهت جلسة الأدمن. سجّل الدخول مرة أخرى قبل رفع الملف.');
+async function getValidAccessToken() {
+  const read = async () => {
+    const result = await supabase.auth.getSession();
+    return result?.data?.session?.access_token || null;
+  };
+
+  let token = await read();
+
+  // A Supabase user access token must be a JWT (three dot-separated parts).
+  // Publishable/anon keys are API keys, not user JWTs, and must never be used
+  // as the TUS Authorization bearer token.
+  const isJwt = (value) => typeof value === 'string' && value.split('.').length === 3;
+
+  if (!isJwt(token)) {
+    try {
+      const refreshed = await supabase.auth.refreshSession();
+      token = refreshed?.data?.session?.access_token || null;
+    } catch (_) {
+      token = null;
+    }
   }
 
+  if (!isJwt(token)) {
+    throw new Error('جلسة Supabase غير صالحة للرفع. سجّل الخروج ثم سجّل الدخول مرة أخرى.');
+  }
+
+  return token;
+}
+
+async function resumableUpload(file, path, progress, label, bucket = 'app-files') {
+  const initialToken = await getValidAccessToken();
   const projectRef = new URL(SUPABASE_URL).hostname.split('.')[0];
   const endpoint = `https://${projectRef}.storage.supabase.co/storage/v1/upload/resumable`;
-  const chunkSize = 6 * 1024 * 1024; // Supabase TUS requires 6MB chunks for now.
+  const chunkSize = 6 * 1024 * 1024;
   const totalBytes = Number(file.size) || 0;
 
   const formatTransfer = (bytes) => {
@@ -892,7 +916,6 @@ async function resumableUpload(file, path, progress, label, bucket = 'app-files'
       const startedAt = performance.now();
       let lastBytes = 0;
       let lastTime = startedAt;
-      let upload;
 
       const finishError = (error) => {
         let message = error?.message || 'فشل الرفع المتدرج.';
@@ -906,15 +929,15 @@ async function resumableUpload(file, path, progress, label, bucket = 'app-files'
         reject(new Error(`${label}: ${message}`));
       };
 
-      upload = new TusUpload(file, {
+      const upload = new TusUpload(file, {
         endpoint,
         retryDelays: [0, 1000, 3000, 5000, 10000, 20000],
         chunkSize,
-        uploadDataDuringCreation: true,
+        uploadDataDuringCreation: false,
         storeFingerprintForResuming: true,
         removeFingerprintOnSuccess: true,
         fingerprint: () => Promise.resolve([
-          'codex-tus-v1',
+          'codex-tus-v2',
           bucket,
           path,
           file.name,
@@ -922,24 +945,21 @@ async function resumableUpload(file, path, progress, label, bucket = 'app-files'
           String(file.lastModified || 0),
         ].join(':')),
         headers: {
-          authorization: `Bearer ${token}`,
-          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${initialToken}`,
           'x-upsert': 'true',
         },
         onBeforeRequest: async (req) => {
-          // Refresh/replace the access token before every TUS request so a
-          // very large upload does not fail simply because the JWT rotated.
           try {
-            const latest = await supabase.auth.getSession();
-            const freshToken = latest?.data?.session?.access_token;
-            if (freshToken) req.setHeader('authorization', `Bearer ${freshToken}`);
-            req.setHeader('apikey', SUPABASE_KEY);
-          } catch (_) {}
+            const freshToken = await getValidAccessToken();
+            req.setHeader('Authorization', `Bearer ${freshToken}`);
+          } catch (error) {
+            finishError(error);
+          }
         },
         onShouldRetry: (error) => {
           const status = error?.originalResponse?.getStatus?.() || 0;
-          // Do not waste time retrying permanent permission/size errors.
-          if (status === 403 || status === 413 || status === 422) return false;
+          if (status === 401 || status === 403) return false;
+          if (status === 409 || status === 413 || status === 422) return false;
           return true;
         },
         metadata: {
@@ -951,14 +971,15 @@ async function resumableUpload(file, path, progress, label, bucket = 'app-files'
         onError: finishError,
         onProgress: (bytesUploaded, bytesTotal) => {
           const now = performance.now();
-          const elapsed = Math.max((now - startedAt) / 1000, 0.001);
           const deltaSeconds = Math.max((now - lastTime) / 1000, 0.001);
           const deltaBytes = Math.max(bytesUploaded - lastBytes, 0);
-          const speed = deltaBytes > 0 ? deltaBytes / deltaSeconds : bytesUploaded / elapsed;
+          const speed = deltaBytes > 0
+            ? deltaBytes / deltaSeconds
+            : 0;
           const percent = bytesTotal ? (bytesUploaded / bytesTotal) * 100 : 0;
           const remaining = Math.max(bytesTotal - bytesUploaded, 0);
           const etaSeconds = speed > 0 ? remaining / speed : 0;
-          const detail = `${formatTransfer(bytesUploaded)} / ${formatTransfer(bytesTotal)} · ${formatTransfer(speed)}/ث · ${etaSeconds > 0 ? `متبقي ${formatEta(etaSeconds)}` : 'جارٍ الحساب'}`;
+          const detail = `${formatTransfer(bytesUploaded)} / ${formatTransfer(bytesTotal)} · ${speed > 0 ? `${formatTransfer(speed)}/ث` : 'حساب السرعة…'} · ${etaSeconds > 0 ? `متبقي ${formatEta(etaSeconds)}` : ''}`;
           progress?.(percent, `${label} — ${detail}`);
           lastBytes = bytesUploaded;
           lastTime = now;
@@ -969,7 +990,6 @@ async function resumableUpload(file, path, progress, label, bucket = 'app-files'
         },
       });
 
-      // Reuse an interrupted TUS session when one exists for the same file/path.
       upload.findPreviousUploads()
         .then((previousUploads) => {
           if (previousUploads?.length) {
@@ -981,25 +1001,17 @@ async function resumableUpload(file, path, progress, label, bucket = 'app-files'
     });
   };
 
-  // First attempt plus one fresh resume attempt in case the connection drops after
-  // TUS has created a resumable session. The client keeps the fingerprint locally.
   try {
     await runUploadAttempt();
   } catch (firstError) {
     const message = String(firstError?.message || firstError || '');
+    if (/invalid compact jws|invalid jwt|unauthorized|401|403/i.test(message)) {
+      throw new Error(`${label}: جلسة الدخول إلى Storage غير صالحة (Invalid Compact JWS). سجّل الخروج من CODEX، سجّل الدخول مرة أخرى، ثم أعد الرفع.`);
+    }
     if (/50\s*mb|file size|too large|payload|413|limit/i.test(message)) {
-      throw new Error(`${label}: حجم الملف أكبر من الحد المسموح به في إعدادات مشروع Supabase. لملف 500MB يجب أن يكون المشروع على خطة تسمح بهذا الحجم وأن يكون Global file size limit مرفوعًا بما يكفي.`);
+      throw new Error(`${label}: حجم الملف أكبر من الحد المسموح في Storage لهذا المشروع. لملف 500MB يجب أن تكون خطة المشروع وإعداد Global file size limit مناسبين.`);
     }
-    try {
-      progress?.(0, `${label} — محاولة استئناف الرفع…`);
-      await runUploadAttempt();
-    } catch (secondError) {
-      const secondMessage = String(secondError?.message || secondError || message);
-      if (/50\s*mb|file size|too large|payload|413|limit/i.test(secondMessage)) {
-        throw new Error(`${label}: حجم الملف أكبر من الحد المسموح به في إعدادات مشروع Supabase. لملف 500MB يجب أن يكون المشروع على خطة تسمح بهذا الحجم وأن يكون Global file size limit مرفوعًا بما يكفي.`);
-      }
-      throw secondError;
-    }
+    throw firstError;
   }
 
   return path;
