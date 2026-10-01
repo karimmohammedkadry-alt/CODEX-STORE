@@ -48,6 +48,11 @@ function friendlyError(error, fallback = 'حدث خطأ غير متوقع.') {
   if (lower.includes('bucket') && lower.includes('not found')) return 'مجلد التخزين app-files غير موجود في Supabase.';
   if (lower.includes('mime') || lower.includes('content type')) return 'Supabase رفض نوع الملف. تأكد أن Bucket يسمح برفع الملفات.';
   if (lower.includes('payload too large') || lower.includes('too large') || lower.includes('maximum allowed size') || lower.includes('file exceeds') || lower.includes('entity too large') || lower.includes('413')) return 'حجم الملف أكبر من الحد المسموح به في Storage لهذا المشروع. لملف 500MB ارفع Global file size limit في Supabase بما يكفي وتأكد أن خطة المشروع تسمح بالحجم.';
+  if (lower.includes('admin_required')) return 'هذه العملية تحتاج حساب Admin صالح. سجّل الدخول بحساب الأدمن ثم جرّب مرة أخرى.';
+  if (lower.includes('invalid_creator')) return 'جلسة الأدمن الحالية غير صالحة لإنشاء التطبيق. سجّل الخروج ثم ادخل مرة أخرى.';
+  if (lower.includes('app_not_found')) return 'سجل التطبيق غير موجود في قاعدة البيانات.';
+  if (lower.includes('invalid platform')) return `قيمة النظام غير متوافقة مع قاعدة البيانات الحالية. تفاصيل Supabase: ${message}`;
+
   if (lower.includes('failed to fetch') || lower.includes('network')) return 'تعذر الاتصال بـ Supabase. تحقق من الإنترنت وإعدادات المشروع.';
   return message;
 }
@@ -94,8 +99,16 @@ function appIconMarkup(app, cls = 'app-icon') {
   return `<div class="${cls} auto-initials">${escapeHTML(initials(app?.name || app?.icon_text || 'C'))}</div>`;
 }
 
+function normalizePlatform(value = '') {
+  const v = String(value || '').trim().toLowerCase();
+  if (['windows', 'win', 'exe', 'pc', 'desktop'].includes(v)) return 'windows';
+  if (['android', 'apk', 'mobile'].includes(v)) return 'android';
+  return v;
+}
+
 function getFile(app, platform) {
-  return (app?.app_files || []).find((file) => file.platform === platform);
+  const wanted = normalizePlatform(platform);
+  return (app?.app_files || []).find((file) => normalizePlatform(file.platform) === wanted);
 }
 
 function appTotalBytes(app) {
@@ -108,18 +121,20 @@ function appSize(app) {
 }
 
 function platformName(app) {
-  const platforms = (app?.app_files || []).map((file) => file.platform);
+  const platforms = (app?.app_files || []).map((file) => normalizePlatform(file.platform));
   if (platforms.includes('windows') && platforms.includes('android')) return 'Windows + Android';
   if (platforms.includes('android')) return 'Android';
   if (platforms.includes('windows')) return 'Windows';
-  if (app?.platform) return app.platform;
-  return '—';
+  const appPlatform = normalizePlatform(app?.platform);
+  if (appPlatform === 'windows') return 'Windows';
+  if (appPlatform === 'android') return 'Android';
+  return app?.platform || '—';
 }
 
 function fileBadgeMarkup(app) {
   const files = app?.app_files || [];
   if (!files.length) return '<div class="file-badges empty"><span>لا توجد ملفات</span></div>';
-  return `<div class="file-badges">${files.map((file) => `<span>${file.platform === 'windows' ? 'EXE' : 'APK'} · ${escapeHTML(formatFileSize(file.size_bytes))}</span>`).join('')}</div>`;
+  return `<div class="file-badges">${files.map((file) => `<span>${normalizePlatform(file.platform) === 'windows' ? 'EXE' : 'APK'} · ${escapeHTML(formatFileSize(file.size_bytes))}</span>`).join('')}</div>`;
 }
 
 function publicUrl(path, downloadName = null, bucket = 'app-files') {
@@ -315,7 +330,7 @@ function filterHomeApps() {
 
 function buildDownloadLink(file) {
   const url = publicUrl(file.storage_path, file.file_name);
-  const label = file.platform === 'windows' ? 'Windows / EXE' : 'Android / APK';
+  const label = normalizePlatform(file.platform) === 'windows' ? 'Windows / EXE' : 'Android / APK';
   return `<a class="file-download-option" data-download-app="${escapeHTML(file.app_id || '')}" href="${escapeHTML(url)}" aria-label="تحميل ${escapeHTML(label)}"><span>تحميل ${label}</span><strong>${escapeHTML(formatFileSize(file.size_bytes))}</strong></a>`;
 }
 
@@ -880,7 +895,14 @@ async function resumableUpload(file, path, progress, label, bucket = 'app-files'
       let upload;
 
       const finishError = (error) => {
-        const message = error?.message || 'فشل الرفع المتدرج.';
+        let message = error?.message || 'فشل الرفع المتدرج.';
+        try {
+          const response = error?.originalResponse;
+          const status = response?.getStatus?.();
+          const body = response?.getBody?.();
+          if (status) message += ` (HTTP ${status})`;
+          if (body) message += ` — ${String(body).slice(0, 500)}`;
+        } catch (_) {}
         reject(new Error(`${label}: ${message}`));
       };
 
@@ -903,6 +925,22 @@ async function resumableUpload(file, path, progress, label, bucket = 'app-files'
           authorization: `Bearer ${token}`,
           apikey: SUPABASE_KEY,
           'x-upsert': 'true',
+        },
+        onBeforeRequest: async (req) => {
+          // Refresh/replace the access token before every TUS request so a
+          // very large upload does not fail simply because the JWT rotated.
+          try {
+            const latest = await supabase.auth.getSession();
+            const freshToken = latest?.data?.session?.access_token;
+            if (freshToken) req.setHeader('authorization', `Bearer ${freshToken}`);
+            req.setHeader('apikey', SUPABASE_KEY);
+          } catch (_) {}
+        },
+        onShouldRetry: (error) => {
+          const status = error?.originalResponse?.getStatus?.() || 0;
+          // Do not waste time retrying permanent permission/size errors.
+          if (status === 403 || status === 413 || status === 422) return false;
+          return true;
         },
         metadata: {
           bucketName: bucket,
@@ -1115,36 +1153,44 @@ async function createAppRecord(form) {
   let warning = null;
 
   try {
-    progress.update(8, 'التحقق من الملفات');
-    const payload = {
-      name,
-      slug: makeSlug(name),
-      description,
-      category,
-      category_name: categories[category] || categories.tools,
-      version,
-      changelog,
-      icon_text: initials(name),
-      created_by: currentUser.id,
-      total_size_bytes: summary.totalBytes,
-      platform: summary.platform,
-      updated_at: new Date().toISOString(),
-    };
+    progress.update(8, 'التحقق من الملفات والجلسة');
+
+    // IMPORTANT: do not send a composite "Windows + Android" value into an
+    // existing app_platform enum. The DB function maps the primary platform
+    // to the exact enum label used by the existing database.
+    const primaryPlatform = summary.exe ? 'windows' : 'android';
 
     progress.update(15, 'إنشاء سجل التطبيق');
-    const insert = await withTimeout(
-      supabase.from('apps').insert(payload).select().single(),
-      12000,
-      'انتهت مهلة إنشاء التطبيق.'
+    const created = await withTimeout(
+      supabase.rpc('create_app_record', {
+        p_name: name,
+        p_slug: makeSlug(name),
+        p_description: description,
+        p_changelog: changelog,
+        p_category: category,
+        p_category_name: categories[category] || categories.tools,
+        p_version: version,
+        p_icon_text: initials(name),
+        p_created_by: currentUser.id,
+        p_total_size_bytes: summary.totalBytes,
+        p_platform: primaryPlatform,
+      }),
+      15000,
+      'انتهت مهلة إنشاء سجل التطبيق.'
     );
-    if (insert.error) throw new Error(`إنشاء سجل التطبيق: ${friendlyError(insert.error, insert.error.message)}`);
-    app = insert.data;
+
+    if (created.error) {
+      throw new Error(`إنشاء سجل التطبيق: ${friendlyError(created.error, created.error.message)}`);
+    }
+
+    app = Array.isArray(created.data) ? created.data[0] : created.data;
+    if (!app?.id) throw new Error('تم إنشاء الطلب لكن لم يرجع Supabase رقم التطبيق.');
 
     const uploadTasks = [];
     if (summary.exe) uploadTasks.push(['windows', summary.exe]);
     if (summary.apk) uploadTasks.push(['android', summary.apk]);
 
-    const uploadResults = await Promise.all(
+    await Promise.all(
       uploadTasks.map(async ([platform, file], index) => {
         const start = 22 + index * (48 / uploadTasks.length);
         const end = start + 36;
@@ -1152,24 +1198,38 @@ async function createAppRecord(form) {
           const value = Math.round(start + (local / 100) * (end - start));
           progress.update(value, label);
         });
-        // Record each successful upload immediately so a parallel failure
-        // can still be cleaned up in the outer catch block.
-        if (row?.storage_path) createdPaths.push(row.storage_path);
+        if (!row?.storage_path) throw new Error(`تم رفع ${platform === 'windows' ? 'EXE' : 'APK'} لكن لم يرجع مسار التخزين.`);
+        createdPaths.push(row.storage_path);
         return row;
       }),
     );
 
-    progress.update(73, 'تأكيد الملفات وحساب الحجم');
-    const filesResult = await supabase.from('app_files').select('id,app_id,platform,file_name,storage_path,mime_type,size_bytes').eq('app_id', app.id);
+    progress.update(73, 'تأكيد التسجيل وحساب الحجم');
+    const filesResult = await withTimeout(
+      supabase.from('app_files')
+        .select('id,app_id,platform,file_name,storage_path,mime_type,size_bytes,created_at')
+        .eq('app_id', app.id),
+      15000,
+      'انتهت مهلة قراءة ملفات التطبيق من قاعدة البيانات.'
+    );
     if (filesResult.error) throw new Error(`قراءة ملفات التطبيق: ${friendlyError(filesResult.error, filesResult.error.message)}`);
+
     const files = filesResult.data || [];
-    if (!files.length) throw new Error('تم رفع الملف لكن لم يتم تسجيله في قاعدة البيانات.');
+    if (files.length !== uploadTasks.length) {
+      throw new Error(`تم رفع ${uploadTasks.length} ملف/ملفات، لكن قاعدة البيانات سجّلت ${files.length} فقط.`);
+    }
 
     const total = files.reduce((sum, file) => sum + Number(file.size_bytes || 0), 0);
-    const platform = files.some((file) => file.platform === 'windows') && files.some((file) => file.platform === 'android')
-      ? 'Windows + Android'
-      : files.some((file) => file.platform === 'android') ? 'Android' : 'Windows';
-    const meta = await supabase.from('apps').update({ total_size_bytes: total, updated_at: new Date().toISOString() }).eq('id', app.id);
+    const meta = await withTimeout(
+      supabase.from('apps')
+        .update({
+          total_size_bytes: total,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', app.id),
+      12000,
+      'انتهت مهلة تحديث حجم التطبيق.'
+    );
     if (meta.error) throw new Error(`تحديث حجم التطبيق: ${friendlyError(meta.error, meta.error.message)}`);
 
     if (summary.icon) {
@@ -1177,10 +1237,14 @@ async function createAppRecord(form) {
       try {
         const iconResult = await uploadIcon(summary.icon, app.id, (local, label) => progress.update(83 + Math.round(local * 0.09), label));
         createdPaths.push({ bucket: 'app-icons', path: iconResult.path });
-        const iconUpdate = await supabase.from('apps').update({ icon_url: iconResult.url, icon_storage_path: iconResult.path, updated_at: new Date().toISOString() }).eq('id', app.id);
+        const iconUpdate = await supabase.from('apps').update({
+          icon_url: iconResult.url,
+          icon_storage_path: iconResult.path,
+          updated_at: new Date().toISOString(),
+        }).eq('id', app.id);
         if (iconUpdate.error) throw iconUpdate.error;
       } catch (error) {
-        warning = 'تم رفع البرنامج بنجاح، لكن الصورة الاختيارية لم تُرفع.';
+        warning = 'تم رفع البرنامج وتسجيله بنجاح، لكن الصورة الاختيارية لم تُرفع.';
         console.warn('optional icon upload failed', error);
       }
     }
@@ -1190,7 +1254,7 @@ async function createAppRecord(form) {
     form.reset();
     resetUploadFields();
     progress.done('تمت إضافة التطبيق بنجاح');
-    toast(warning || 'تمت إضافة التطبيق وتحديث المتجر بنجاح.');
+    toast(warning || 'تمت إضافة التطبيق وتسجيل ملفاته وتحديث المتجر بنجاح.');
   } catch (error) {
     console.error('createAppRecord', error);
     if (app?.id) {
@@ -1205,7 +1269,7 @@ async function createAppRecord(form) {
         console.warn('cleanup failed', cleanupError);
       }
     }
-    const message = friendlyError(error, 'فشل رفع التطبيق.');
+    const message = friendlyError(error, 'فشل رفع التطبيق وتسجيله.');
     progress.fail(message);
     toast(message, 'error');
   } finally {
@@ -1351,7 +1415,7 @@ function openAppEditor(id) {
   if (removeExe) removeExe.checked = false;
   if (removeApk) removeApk.checked = false;
   if (removeIcon) removeIcon.checked = false;
-  if (currentFiles) currentFiles.textContent = (app.app_files || []).map((file) => `${file.platform === 'windows' ? 'EXE' : 'APK'} · ${formatFileSize(file.size_bytes)}`).join('  |  ') || 'لا توجد ملفات';
+  if (currentFiles) currentFiles.textContent = (app.app_files || []).map((file) => `${normalizePlatform(file.platform) === 'windows' ? 'EXE' : 'APK'} · ${formatFileSize(file.size_bytes)}`).join('  |  ') || 'لا توجد ملفات';
   modal.classList.add('open');
 }
 
@@ -1437,8 +1501,7 @@ async function updateApp(event) {
     if (filesResult.error) throw filesResult.error;
     const files = filesResult.data || [];
     const total = files.reduce((sum, file) => sum + Number(file.size_bytes || 0), 0);
-    const platform = files.length === 2 ? 'Windows + Android' : files[0]?.platform === 'android' ? 'Android' : files[0]?.platform === 'windows' ? 'Windows' : 'Windows';
-    const meta = await supabase.from('apps').update({ total_size_bytes: total, updated_at: new Date().toISOString() }).eq('id', id);
+        const meta = await supabase.from('apps').update({ total_size_bytes: total, updated_at: new Date().toISOString() }).eq('id', id);
     if (meta.error) throw meta.error;
 
     let warning = null;

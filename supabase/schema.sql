@@ -227,6 +227,288 @@ revoke all on function public.current_profile_role() from public;
 grant execute on function public.current_profile_role() to authenticated;
 
 -- ============================================================
+-- PLATFORM ENUM COMPATIBILITY HELPERS
+-- Supports existing text columns and ENUM columns such as
+-- public.app_platform without changing their type.
+-- ============================================================
+create or replace function public.resolve_platform_value(
+  p_table text,
+  p_platform text
+)
+returns text
+language plpgsql
+stable
+security definer
+set search_path=public,pg_temp
+as $$
+declare
+  v_udt_schema text;
+  v_udt_name text;
+  v_enum_value text;
+  v_wants text := lower(trim(coalesce(p_platform,'')));
+begin
+  select udt_schema, udt_name
+    into v_udt_schema, v_udt_name
+  from information_schema.columns
+  where table_schema='public'
+    and table_name=p_table
+    and column_name='platform';
+
+  if v_udt_name is null then
+    raise exception '%: platform column not found', p_table;
+  end if;
+
+  -- Plain text-like columns: preserve the logical value.
+  if v_udt_name in ('text','varchar','bpchar') then
+    return lower(trim(p_platform));
+  end if;
+
+  -- Existing ENUM column: resolve the exact enum label already present.
+  select e.enumlabel
+    into v_enum_value
+  from pg_type t
+  join pg_enum e on e.enumtypid=t.oid
+  join pg_namespace n on n.oid=t.typnamespace
+  where n.nspname=v_udt_schema
+    and t.typname=v_udt_name
+    and (
+      lower(e.enumlabel)=v_wants
+      or (
+        v_wants='windows'
+        and lower(e.enumlabel) in ('win','exe','pc','desktop')
+      )
+      or (
+        v_wants='android'
+        and lower(e.enumlabel) in ('apk','mobile')
+      )
+    )
+  order by
+    case
+      when lower(e.enumlabel)=v_wants then 0
+      else 1
+    end,
+    e.enumsortorder
+  limit 1;
+
+  if v_enum_value is not null then
+    return v_enum_value;
+  end if;
+
+  -- Give a useful error rather than a cryptic enum cast failure.
+  raise exception 'Invalid platform "%" for %. Allowed values: %',
+    p_platform,
+    p_table,
+    (
+      select string_agg(e.enumlabel, ', ' order by e.enumsortorder)
+      from pg_type t
+      join pg_enum e on e.enumtypid=t.oid
+      join pg_namespace n on n.oid=t.typnamespace
+      where n.nspname=v_udt_schema
+        and t.typname=v_udt_name
+    );
+end;
+$$;
+
+revoke all on function public.resolve_platform_value(text,text) from public;
+grant execute on function public.resolve_platform_value(text,text) to authenticated;
+
+-- ============================================================
+-- CREATE APP RECORD RPC
+-- Fixes existing app_platform ENUM mismatches.
+-- ============================================================
+create or replace function public.create_app_record(
+  p_name text,
+  p_slug text,
+  p_description text,
+  p_changelog text,
+  p_category text,
+  p_category_name text,
+  p_version text,
+  p_icon_text text,
+  p_created_by uuid,
+  p_total_size_bytes bigint,
+  p_platform text
+)
+returns public.apps
+language plpgsql
+security definer
+set search_path=public,pg_temp
+as $$
+declare
+  v_udt_schema text;
+  v_udt_name text;
+  v_platform text;
+  v_row public.apps;
+  v_id uuid := gen_random_uuid();
+begin
+  if not public.is_admin() then
+    raise exception 'admin_required';
+  end if;
+
+  if p_created_by is null or p_created_by <> auth.uid() then
+    raise exception 'invalid_creator';
+  end if;
+
+  select udt_schema, udt_name
+    into v_udt_schema, v_udt_name
+  from information_schema.columns
+  where table_schema='public'
+    and table_name='apps'
+    and column_name='platform';
+
+  v_platform := public.resolve_platform_value('apps', p_platform);
+
+  if exists (
+    select 1
+    from public.apps
+    where slug=p_slug
+  ) then
+    p_slug := p_slug || '-' || left(replace(v_id::text,'-',''),8);
+  end if;
+
+  if exists (
+    select 1
+    from pg_type t
+    join pg_namespace n on n.oid=t.typnamespace
+    where n.nspname=v_udt_schema
+      and t.typname=v_udt_name
+      and t.typtype='e'
+  ) then
+    execute format(
+      'insert into public.apps (id,name,slug,description,changelog,category,category_name,version,icon_text,created_by,total_size_bytes,platform,updated_at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::%I.%I,now()) returning *',
+      v_udt_schema,
+      v_udt_name
+    )
+    using
+      v_id,
+      p_name,
+      p_slug,
+      p_description,
+      p_changelog,
+      p_category,
+      p_category_name,
+      p_version,
+      p_icon_text,
+      p_created_by,
+      coalesce(p_total_size_bytes,0),
+      v_platform
+    into v_row;
+  else
+    insert into public.apps (
+      id,name,slug,description,changelog,category,category_name,
+      version,icon_text,created_by,total_size_bytes,platform,updated_at
+    )
+    values (
+      v_id,p_name,p_slug,p_description,p_changelog,p_category,p_category_name,
+      p_version,p_icon_text,p_created_by,coalesce(p_total_size_bytes,0),v_platform,now()
+    )
+    returning * into v_row;
+  end if;
+
+  return v_row;
+end;
+$$;
+
+revoke all on function public.create_app_record(text,text,text,text,text,text,text,text,uuid,bigint,text) from public;
+grant execute on function public.create_app_record(text,text,text,text,text,text,text,text,uuid,bigint,text) to authenticated;
+
+-- ============================================================
+-- APP FILE SAVE RPC - FINAL ENUM-SAFE VERSION
+-- ============================================================
+create or replace function public.save_app_file(
+  p_app_id uuid,
+  p_platform text,
+  p_file_name text,
+  p_storage_path text,
+  p_mime_type text,
+  p_size_bytes bigint
+)
+returns public.app_files
+language plpgsql
+security definer
+set search_path=public,pg_temp
+as $$
+declare
+  v_udt_schema text;
+  v_udt_name text;
+  v_platform text;
+  v_row public.app_files;
+begin
+  if not public.is_admin() then
+    raise exception 'admin_required';
+  end if;
+
+  if not exists (
+    select 1
+    from public.apps
+    where id=p_app_id
+  ) then
+    raise exception 'app_not_found';
+  end if;
+
+  v_platform := public.resolve_platform_value('app_files', p_platform);
+
+  select udt_schema, udt_name
+    into v_udt_schema, v_udt_name
+  from information_schema.columns
+  where table_schema='public'
+    and table_name='app_files'
+    and column_name='platform';
+
+  if exists (
+    select 1
+    from public.app_files
+    where app_id=p_app_id
+      and lower(platform::text)=lower(v_platform)
+  ) then
+
+    if v_udt_name in ('text','varchar','bpchar') then
+      update public.app_files
+      set
+        file_name=p_file_name,
+        storage_path=p_storage_path,
+        mime_type=p_mime_type,
+        size_bytes=coalesce(p_size_bytes,0)
+      where app_id=p_app_id
+        and lower(platform::text)=lower(v_platform)
+      returning * into v_row;
+    else
+      execute format(
+        'update public.app_files set file_name=$3, storage_path=$4, mime_type=$5, size_bytes=$6 where app_id=$1 and lower(platform::text)=lower($2) returning *'
+      )
+      using p_app_id, v_platform, p_file_name, p_storage_path, p_mime_type, coalesce(p_size_bytes,0)
+      into v_row;
+    end if;
+
+    return v_row;
+  end if;
+
+  if v_udt_name in ('text','varchar','bpchar') then
+    insert into public.app_files (
+      app_id,platform,file_name,storage_path,mime_type,size_bytes
+    )
+    values (
+      p_app_id,v_platform,p_file_name,p_storage_path,p_mime_type,coalesce(p_size_bytes,0)
+    )
+    returning * into v_row;
+  else
+    execute format(
+      'insert into public.app_files(app_id,platform,file_name,storage_path,mime_type,size_bytes) values($1,$2::%I.%I,$3,$4,$5,$6) returning *',
+      v_udt_schema,
+      v_udt_name
+    )
+    using p_app_id, v_platform, p_file_name, p_storage_path, p_mime_type, coalesce(p_size_bytes,0)
+    into v_row;
+  end if;
+
+  return v_row;
+end;
+$$;
+
+revoke all on function public.save_app_file(uuid,text,text,text,text,bigint) from public;
+grant execute on function public.save_app_file(uuid,text,text,text,text,bigint) to authenticated;
+
+-- ============================================================
 -- DOWNLOAD COUNTER
 -- ============================================================
 create or replace function public.increment_app_download(p_app_id uuid)
